@@ -1,0 +1,15 @@
+{
+  "name": "TWIX Gaming Lounge",
+  "short_name": "TWIX",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#f59e0b",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/686/686589.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
