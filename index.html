@@ -22,6 +22,8 @@
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <style>
     body { font-family: 'Cairo', sans-serif; background-color: #0a0a0a; color: #f5f5f5; }
     .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -38,7 +40,16 @@
 
   <script type="text/babel">
     const { useState, useEffect } = React;
-
+  const firebaseConfig = {
+    apiKey: "AIzaSyDEdzWDW6_nLF5DFgUCXluli15KJVxHPN4",
+    authDomain: "twix-gaming.firebaseapp.com",
+    projectId: "twix-gaming",
+    storageBucket: "twix-gaming.firebasestorage.app",
+    messagingSenderId: "641751763175",
+    appId: "1:641751763175:web:8bf7c4cebafac0ae213a42"
+  };
+  if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
     const SITE_CONFIG = {
       name: "TWIX Gaming Lounge",
       phone: "01289333316",
@@ -126,6 +137,13 @@
       useEffect(() => { localStorage.setItem('twix_devices', JSON.stringify(devices)); }, [devices]);
       useEffect(() => { localStorage.setItem('twix_games', JSON.stringify(games)); }, [games]);
       useEffect(() => { localStorage.setItem('twix_bookings', JSON.stringify(bookings)); }, [bookings]);
+      useEffect(() => {
+        return db.collection('bookings').onSnapshot(snap => {
+          const list = [];
+          snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+          if (list.length > 0) setBookings(list);
+        });
+      }, []);
       useEffect(() => { localStorage.setItem('twix_sessions', JSON.stringify(sessions)); }, [sessions]);
       useEffect(() => { localStorage.setItem('twix_sales', JSON.stringify(completedSales)); }, [completedSales]);
       useEffect(() => { localStorage.setItem('twix_expenses', JSON.stringify(expenses)); }, [expenses]);
@@ -634,7 +652,10 @@
               <div className="flex justify-between border-b border-neutral-800 pb-2"><span>الرقم المرجعي:</span><strong className="text-amber-400 font-mono">{pendingBooking.ref}</strong></div>
               <div className="flex justify-between border-b border-neutral-800 pb-2"><span>المبلغ المطلوب:</span><strong className="text-white text-base">{pendingBooking.totalCost} ج.م</strong></div>
               <div className="grid grid-cols-2 gap-2 text-center">{['Visa / MasterCard', 'Meeza (ميزة)', 'فودافون كاش', 'فوري كود'].map((m, i) => (<div key={i} className="p-2 border border-neutral-800 rounded-xl bg-neutral-950 text-neutral-300 font-bold">{m}</div>))}</div>
-              <button onClick={() => { setBookings([{ ...pendingBooking, status: 'awaiting_admin_approval' }, ...bookings]); setPaid(true); }} className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-xl text-xs shadow-lg shadow-emerald-500/20">محاكاة إتمام الدفع ({pendingBooking.totalCost} ج.م)</button>
+      
+            <button onClick={() => {
+            db.collection('bookings').doc(pendingBooking.id).set({ ...pendingBooking, status: 'awaiting_admin_approval' });
+              setBookings([{ ...pendingBooking, status: 'awaiting_admin_approval' }, ...bookings]); setPaid(true); }} className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-xl text-xs shadow-lg shadow-emerald-500/20">محاكاة إتمام الدفع ({pendingBooking.totalCost} ج.م)</button>
             </div>
           ) : (
             <div className="bg-neutral-900 border border-emerald-500/40 p-6 rounded-3xl text-center space-y-4">
