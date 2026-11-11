@@ -23,6 +23,7 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
   <style>
     body { font-family: 'Cairo', sans-serif; background-color: #0a0a0a; color: #f5f5f5; }
@@ -31,7 +32,11 @@
     @media print {
       body * { visibility: hidden !important; }
       #printable-receipt, #printable-receipt * { visibility: visible !important; }
-      #printable-receipt { position: absolute; left: 0; top: 0; width: 100%; color: #000 !important; background: #fff !important; }
+      #printable-receipt { 
+        position: absolute; left: 0; top: 0; width: 80mm !important; 
+        color: #000 !important; background: #fff !important; 
+        padding: 5mm !important; font-family: monospace !important;
+      }
     }
   </style>
 </head>
@@ -39,7 +44,7 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
     const firebaseConfig = {
       apiKey: "AIzaSyDEdzWDW6_nLF5DFgUCXluli15KJVxHPN4",
       authDomain: "twix-gaming.firebaseapp.com",
@@ -50,13 +55,15 @@
     };
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+    const auth = firebase.auth();
 
     const SITE_CONFIG = {
       name: "TWIX Gaming Lounge",
       phone: "01289333316",
       whatsappNumber: "201289333316",
+      mapsUrl: "https://maps.google.com/?q=TWIX+Gaming+Lounge",
       whatsappDefaultMessage: `السلام عليكم، حابب أحجز في TWIX 🎮\nممكن أعرف الأجهزة المتاحة وقائمة الأسعار؟`,
-      legalPolicy: "يرجى مراجعة الجهاز والوقت والمشاريب قبل إتمام الدفع. كافة المدفوعات عبر محافظ الكاش خاضعة للوائح الصالة وغير قابلة للاسترداد بعد التحويل والتأكيد إلا بالتنسيق المباشر مع الإدارة.",
+      legalPolicy: "كافة المدفوعات عبر محافظ الكاش خاضعة للوائح الصالة وغير قابلة للاسترداد بعد التحويل إلا بالتنسيق مع الإدارة.",
       social: {
         instagram: "https://www.instagram.com/revuelto1470?obrf=MWNyZnZybWdqcGViZQ==",
         tiktok: "https://www.tiktok.com/@revuelto778",
@@ -67,19 +74,26 @@
 
     const PRICING = {
       PS4: {
-        single: { ratePer30: 30, ratePerHour: 60, label: "فردي (مع صديق)" },
-        multi:  { ratePer30: 40, ratePerHour: 80, label: "ملتي (4 ذراعات)" }
+        single: { ratePer30: 35, ratePerHour: 70, label: "فردي (مع صديق - ذراعين)" },
+        multi:  { ratePer30: 45, ratePerHour: 90, label: "ملتي (4 ذراعات - شلة)" }
       },
       PS5: {
-        single: { ratePer30: 40, ratePerHour: 80, label: "فردي (مع صديق)" },
-        multi:  { ratePer30: 50, ratePerHour: 100, label: "ملتي (4 ذراعات)" }
+        single: { ratePer30: 50, ratePerHour: 100, label: "فردي VIP (مع صديق - ذراعين)" },
+        multi:  { ratePer30: 60, ratePerHour: 120, label: "ملتي VIP (4 ذراعات - شلة)" }
       }
     };
 
     const SNACKS_MENU = [
-      { id: 'indomie', name: 'إندومي', price: 20, icon: '🍜' },
-      { id: 'tea', name: 'شاي أحمر / أخضر', price: 25, icon: '☕' },
-      { id: 'coffee', name: 'قهوة تركي / إسبريسو', price: 50, icon: '☕' }
+      { id: 'indomie_beef', name: 'إندومي باللحمة', price: 25, icon: '🥩', cat: 'indomie' },
+      { id: 'indomie_chicken', name: 'إندومي بالفراخ', price: 25, icon: '🍗', cat: 'indomie' },
+      { id: 'indomie_veg', name: 'إندومي بالخضار', price: 25, icon: '🥦', cat: 'indomie' },
+      { id: 'chips_med', name: 'شيبسي وسط (أبو 10)', price: 15, icon: '🥔', cat: 'chips' },
+      { id: 'chips_large', name: 'شيبسي كبير (أبو 15)', price: 25, icon: '🥔', cat: 'chips' },
+      { id: 'tea', name: 'شاي بجميع أنواعه', price: 20, icon: '☕', cat: 'drinks' },
+      { id: 'coffee_turk', name: 'قهوة تركي بالمياه', price: 35, icon: '☕', cat: 'drinks' },
+      { id: 'coffee_milk', name: 'نسكافيه / قهوة بالحليب', price: 50, icon: '☕', cat: 'drinks' },
+      { id: 'soda_can', name: 'كانزات مياه غازية', price: 25, icon: '🥤', cat: 'drinks' },
+      { id: 'water', name: 'مياه معدنية مثلجة', price: 10, icon: '💧', cat: 'drinks' }
     ];
 
     function calcPrice(type, mode, minutes) {
@@ -90,9 +104,36 @@
       return Math.max(1, blocks) * m.ratePer30;
     }
 
+    function validateEgyptianPhone(p) {
+      return /^01[0125][0-9]{8}$/.test((p || '').trim());
+    }
+
+    function compressImage(file) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let w = img.width, h = img.height;
+            const max = 700;
+            if (w > h && w > max) { h = Math.round((h * max) / w); w = max; }
+            else if (h > max) { w = Math.round((w * max) / h); h = max; }
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', 0.65));
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
     function playAlertChime(freq1 = 587, freq2 = 880) {
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        if (ctx.state === 'suspended') ctx.resume();
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.connect(gain); gain.connect(ctx.destination);
@@ -103,11 +144,13 @@
         osc.start(); osc.stop(ctx.currentTime + 0.7);
       } catch(e) {}
     }
+    SITE_CONFIG.mapsUrl = "https://maps.app.goo.gl/fez6KsPssgaakSK67";
 
     function App() {
       const [page, setPage] = useState('home');
       const [mobileMenu, setMobileMenu] = useState(false);
-      const [showGoogleModal, setShowGoogleModal] = useState(false);
+      const [showQuickMenu, setShowQuickMenu] = useState(false);
+      const [splitBillModal, setSplitBillModal] = useState(null);
 
       const [currentCustomer, setCurrentCustomer] = useState(() => {
         const s = localStorage.getItem('twix_customer');
@@ -127,12 +170,12 @@
       const [games, setGames] = useState(() => {
         const s = localStorage.getItem('twix_games');
         return s ? JSON.parse(s) : [
-          { id: 'g1', title: 'EA SPORTS FC', category: 'Sports / Football', hearts: 180, image: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80', desc: 'أقوى مباريات كرة القدم والبطولات التنافسية.' },
-          { id: 'g2', title: 'eFootball', category: 'Sports / Tactical', hearts: 125, image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80', desc: 'بناء الهجمات التكتيكية وتحديات الأصدقاء.' },
-          { id: 'g3', title: 'Grand Theft Auto V', category: 'Action / Open World', hearts: 260, image: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?auto=format&fit=crop&w=600&q=80', desc: 'عالم مفتوح ومطاردات ومهمات مشوقة.' },
-          { id: 'g4', title: 'Mortal Kombat', category: 'Fighting / Arcade', hearts: 110, image: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=600&q=80', desc: 'قتالات دموية وحركات قاضية لا ترحم.' },
-          { id: 'g5', title: 'WWE 2K', category: 'Wrestling', hearts: 95, image: 'https://images.unsplash.com/photo-1560253023-3ec5d502959f?auto=format&fit=crop&w=600&q=80', desc: 'حلبات المصارعة العالمية والمباريات الحزامية.' },
-          { id: 'g6', title: 'Car Racing Simulator', category: 'Racing', hearts: 140, image: 'https://images.unsplash.com/photo-1547949003-9792a18a2601?auto=format&fit=crop&w=600&q=80', desc: 'سباقات سرعة وانجراف واقعية بجرافيك جبار.' }
+          { id: 'g1', title: 'EA SPORTS FC', category: 'Sports / Football', hearts: 0, image: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?auto=format&fit=crop&w=600&q=80', desc: 'أقوى مباريات كرة القدم والبطولات التنافسية.' },
+          { id: 'g2', title: 'eFootball', category: 'Sports / Tactical', hearts: 0, image: 'https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=600&q=80', desc: 'بناء الهجمات التكتيكية وتحديات الأصدقاء.' },
+          { id: 'g3', title: 'Grand Theft Auto V', category: 'Action / Open World', hearts: 0, image: 'https://images.unsplash.com/photo-1538481199705-c710c4e965fc?auto=format&fit=crop&w=600&q=80', desc: 'عالم مفتوح ومطاردات ومهمات مشوقة.' },
+          { id: 'g4', title: 'Mortal Kombat', category: 'Fighting / Arcade', hearts: 0, image: 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?auto=format&fit=crop&w=600&q=80', desc: 'قتالات دموية وحركات قاضية لا ترحم.' },
+          { id: 'g5', title: 'WWE 2K', category: 'Wrestling', hearts: 0, image: 'https://images.unsplash.com/photo-1560253023-3ec5d502959f?auto=format&fit=crop&w=600&q=80', desc: 'حلبات المصارعة العالمية والمباريات الحزامية.' },
+          { id: 'g6', title: 'Car Racing Simulator', category: 'Racing', hearts: 0, image: 'https://images.unsplash.com/photo-1547949003-9792a18a2601?auto=format&fit=crop&w=600&q=80', desc: 'سباقات سرعة وانجراف واقعية بجرافيك جبار.' }
         ];
       });
 
@@ -141,24 +184,27 @@
       const [sessions, setSessions] = useState(() => JSON.parse(localStorage.getItem('twix_sessions') || '[]'));
       const [completedSales, setCompletedSales] = useState(() => JSON.parse(localStorage.getItem('twix_sales') || '[]'));
       const [expenses, setExpenses] = useState(() => JSON.parse(localStorage.getItem('twix_expenses') || '[]'));
-      const [reviews, setReviews] = useState(() => JSON.parse(localStorage.getItem('twix_reviews') || JSON.stringify([
-        { id: 'r1', author: 'أحمد حسام', rating: 5, comment: 'أجهزة ممتازة وذراعات جديدة وشاشات 120Hz سريعة جداً.', date: '2026-03-28' },
-        { id: 'r2', author: 'محمود سعيد', rating: 5, comment: 'مكان راقي وتكييف ممتاز وصالة الـ VIP فخمة.', date: '2026-03-29' }
-      ])));
-
+      const [reviews, setReviews] = useState([]);
       const [pendingBooking, setPendingBooking] = useState(null);
       const [now, setNow] = useState(Date.now());
 
       useEffect(() => { localStorage.setItem('twix_devices', JSON.stringify(devices)); }, [devices]);
       useEffect(() => { localStorage.setItem('twix_games', JSON.stringify(games)); }, [games]);
       useEffect(() => { localStorage.setItem('twix_bookings', JSON.stringify(bookings)); }, [bookings]);
+      useEffect(() => { localStorage.setItem('twix_sessions', JSON.stringify(sessions)); }, [sessions]);
+      useEffect(() => { localStorage.setItem('twix_sales', JSON.stringify(completedSales)); }, [completedSales]);
+      useEffect(() => { localStorage.setItem('twix_expenses', JSON.stringify(expenses)); }, [expenses]);
+      useEffect(() => { localStorage.setItem('twix_user_hearts', JSON.stringify(userHearts)); }, [userHearts]);
+      useEffect(() => { localStorage.setItem('twix_customer', JSON.stringify(currentCustomer)); }, [currentCustomer]);
 
       useEffect(() => {
-        if (window.Notification && Notification.permission !== 'granted') {
-          Notification.requestPermission();
-        }
+        const timer = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(timer);
+      }, []);
+
+      useEffect(() => {
         let isFirstLoad = true;
-        return db.collection('bookings').onSnapshot(snap => {
+        const unsub = db.collection('bookings').onSnapshot(snap => {
           const list = [];
           snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
           if (list.length > 0) setBookings(list);
@@ -170,7 +216,7 @@
                 playAlertChime(587, 880);
                 if (window.Notification && Notification.permission === 'granted') {
                   new Notification("🎮 حجز جديد في TWIX!", {
-                    body: `العميل: ${b.customerName || 'زبون'}\nالمبلغ: ${b.totalCost || 0} ج.م\nالتفاصيل: ${b.snacksSummary || 'حجز جلسة'}`,
+                    body: `العميل: ${b.customerName || 'زبون'}\nالمبلغ: ${b.totalCost || 0} ج.م\nالطلبات: ${b.snacksSummary || 'حجز جلسة'}`,
                     icon: "https://cdn-icons-png.flaticon.com/512/686/686589.png"
                   });
                 }
@@ -181,29 +227,81 @@
             });
           }
           isFirstLoad = false;
-        });
+        }, err => console.log('Firestore bookings offline fallback'));
+        return () => unsub();
       }, []);
-
-      useEffect(() => { localStorage.setItem('twix_sessions', JSON.stringify(sessions)); }, [sessions]);
-      useEffect(() => { localStorage.setItem('twix_sales', JSON.stringify(completedSales)); }, [completedSales]);
-      useEffect(() => { localStorage.setItem('twix_expenses', JSON.stringify(expenses)); }, [expenses]);
-      useEffect(() => { localStorage.setItem('twix_user_hearts', JSON.stringify(userHearts)); }, [userHearts]);
-      useEffect(() => { localStorage.setItem('twix_reviews', JSON.stringify(reviews)); }, [reviews]);
-      useEffect(() => { localStorage.setItem('twix_customer', JSON.stringify(currentCustomer)); }, [currentCustomer]);
 
       useEffect(() => {
-        const timer = setInterval(() => setNow(Date.now()), 1000);
-        return () => clearInterval(timer);
+        const unsub = db.collection('reviews').orderBy('date', 'desc').onSnapshot(snap => {
+          const list = [];
+          snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+          setReviews(list);
+        }, err => console.log('Firestore reviews offline fallback'));
+        return () => unsub();
       }, []);
 
+      useEffect(() => {
+        const unsub = db.collection('config').doc('game_likes').onSnapshot(doc => {
+          if (doc.exists) {
+            const data = doc.data();
+            setGames(prev => prev.map(g => ({ ...g, hearts: data[g.id] || 0 })));
+          }
+        }, err => console.log('Firestore likes fallback'));
+        return () => unsub();
+      }, []);
+
+      const requestNotificationPermission = () => {
+        if (window.Notification && Notification.permission !== 'granted') {
+          Notification.requestPermission();
+        }
+        playAlertChime(880, 880);
+      };
+
+      const handleGoogleLogin = () => {
+        const provider = new firebase.auth.GoogleAuthProvider();
+        auth.signInWithPopup(provider).then(res => {
+          const u = res.user;
+          const customerData = {
+            name: u.displayName || 'لاعب TWIX',
+            email: (u.email || '').toLowerCase(),
+            avatar: u.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+            authProvider: 'google',
+            walletBalance: 0,
+            rewards: []
+          };
+          db.collection('customers').doc(customerData.email).get().then(doc => {
+            if (doc.exists) {
+              const d = doc.data();
+              customerData.walletBalance = d.walletBalance || 0;
+              customerData.rewards = d.rewards || [];
+            } else {
+              db.collection('customers').doc(customerData.email).set(customerData);
+            }
+            setCurrentCustomer(customerData);
+          });
+        }).catch(err => {
+          const custom = prompt("تعذر فتح نافذة Google، أدخل بريدك الإلكتروني لـ Google:", "gamer@gmail.com");
+          if (custom && custom.includes('@')) {
+            const customerData = {
+              email: custom.trim().toLowerCase(),
+              name: custom.split('@')[0],
+              avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80',
+              authProvider: 'google',
+              walletBalance: 0,
+              rewards: []
+            };
+            setCurrentCustomer(customerData);
+          }
+        });
+      };
       const toggleHeart = (gameId) => {
         if (userHearts.includes(gameId)) {
           setUserHearts(userHearts.filter(id => id !== gameId));
-          setGames(games.map(g => g.id === gameId ? { ...g, hearts: g.hearts - 1 } : g));
+          db.collection('config').doc('game_likes').set({ [gameId]: firebase.firestore.FieldValue.increment(-1) }, { merge: true });
         } else {
           if (userHearts.length >= 2) return alert("يمكنك اختيار لعبتين فقط كحد أقصى للمفضلة بالقلوب!");
           setUserHearts([...userHearts, gameId]);
-          setGames(games.map(g => g.id === gameId ? { ...g, hearts: g.hearts + 1 } : g));
+          db.collection('config').doc('game_likes').set({ [gameId]: firebase.firestore.FieldValue.increment(1) }, { merge: true });
         }
       };
 
@@ -221,7 +319,7 @@
         );
         let totalMinutesPlayed = 0;
         myBookings.forEach(b => {
-          if (b.items) b.items.forEach(itm => { totalMinutesPlayed += (itm.duration || 60); });
+          if (b.items) b.items.forEach(itm => { totalMinutesPlayed += (itm.duration || 30); });
         });
         const totalHours = Math.floor(totalMinutesPlayed / 60);
         const freeHoursEarned = Math.floor(totalHours / 24);
@@ -229,8 +327,32 @@
         const remainingToReward = 24 - progressInTier;
         googleScoreStats = { totalHours, freeHoursEarned, progressInTier, remainingToReward };
       }
+
+      let urgentRewardAlert = null;
+      if (currentCustomer && currentCustomer.rewards && currentCustomer.rewards.length > 0) {
+        currentCustomer.rewards.forEach(rew => {
+          const expiresAt = rew.createdAt + (rew.validDays || 7) * 24 * 60 * 60 * 1000;
+          const diffMs = expiresAt - now;
+          if (diffMs > 0 && diffMs <= 48 * 60 * 60 * 1000 && !rew.used) {
+            const hrsLeft = Math.floor(diffMs / (1000 * 60 * 60));
+            urgentRewardAlert = { title: rew.title, hrsLeft };
+          }
+        });
+      }
+
+      const busyScreensCount = devices.filter(d => d.status === 'busy').length;
+      const isLoungePacked = busyScreensCount >= 3;
+
       return (
         <div className="min-h-screen flex flex-col justify-between">
+          {urgentRewardAlert && (
+            <div className="bg-rose-600 text-white text-xs py-2 px-4 text-center font-bold animate-pulse flex items-center justify-center gap-2">
+              <span>⏳ تنبيه عاجل:</span>
+              <span>هديتك ({urgentRewardAlert.title}) متبقي عليها أقل من {urgentRewardAlert.hrsLeft} ساعة وتضيع!</span>
+              <button onClick={() => navigate('booking')} className="bg-white text-rose-600 px-2 py-0.5 rounded text-[10px] font-black">احجز واستغلها الآن</button>
+            </div>
+          )}
+
           <header className="sticky top-0 z-40 bg-neutral-900/95 backdrop-blur border-b border-neutral-800">
             <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
               <div onClick={() => navigate('home')} className="flex items-center gap-2.5 cursor-pointer">
@@ -240,20 +362,22 @@
 
               <nav className="hidden lg:flex items-center gap-1">
                 {[
-                  { id: 'home', label: 'الرئيسية' }, { id: 'games', label: 'الألعاب' }, { id: 'devices', label: 'الأجهزة' },
-                  { id: 'booking', label: 'الحجز والطلبات' }, { id: 'pricing', label: 'الأسعار والقائمة' }, { id: 'reviews', label: 'التقييمات' },
-                  { id: 'about', label: 'من نحن' }, { id: 'contact', label: 'التواصل' }
+                  { id: 'home', label: 'الرئيسية' }, { id: 'devices', label: 'الأجهزة والحالة' }, { id: 'booking', label: 'احجز الآن' },
+                  { id: 'offers', label: '🔥 العروض والباكيدجات' }, { id: 'games', label: 'الألعاب' }, { id: 'pricing', label: 'الأسعار والقائمة' },
+                  { id: 'reviews', label: 'التقييمات' }, { id: 'contact', label: 'التواصل واللوكيشن' }
                 ].map(item => (
-                  <button key={item.id} onClick={() => navigate(item.id)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${page === item.id ? 'bg-amber-500 text-black' : 'text-neutral-300 hover:text-white hover:bg-neutral-800'}`}>{item.label}</button>
+                  <button key={item.id} onClick={() => navigate(item.id)} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${page === item.id ? 'bg-amber-500 text-black shadow-md' : 'text-neutral-300 hover:text-white hover:bg-neutral-800'}`}>{item.label}</button>
                 ))}
               </nav>
 
               <div className="flex items-center gap-2">
                 <button onClick={() => navigate('account')} className={`px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition-all ${page === 'account' ? 'border-amber-500 bg-amber-500/10 text-amber-400' : 'border-neutral-800 bg-neutral-900 text-neutral-300'}`}>
                   <span>👤</span>
-                  <span className="hidden sm:inline">{currentCustomer ? (googleScoreStats ? `${currentCustomer.name.split(' ')[0]} (${googleScoreStats.totalHours}س)` : currentCustomer.name.split(' ')[0]) : 'حسابي / حجوزاتي'}</span>
+                  <span className="hidden sm:inline">
+                    {currentCustomer ? `${currentCustomer.name.split(' ')[0]} (💰${currentCustomer.walletBalance || 0}ج)` : 'حسابي / محفظتي'}
+                  </span>
                 </button>
-                <button onClick={() => navigate('booking')} className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3.5 py-2 rounded-xl text-xs shadow-md shadow-amber-500/20">احجز الآن</button>
+                <button onClick={() => navigate('booking')} className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3.5 py-2 rounded-xl text-xs shadow-md shadow-amber-500/20">احجز دورك</button>
                 <button onClick={() => navigate('admin')} className={`p-2 rounded-xl border text-xs ${page === 'admin' ? 'border-amber-500 text-amber-400 bg-amber-500/10' : 'border-neutral-800 text-neutral-400'}`} title="لوحة الإدارة">🔒</button>
                 <button onClick={() => setMobileMenu(!mobileMenu)} className="lg:hidden p-2 text-neutral-300 text-lg">☰</button>
               </div>
@@ -262,27 +386,26 @@
             {mobileMenu && (
               <div className="lg:hidden bg-neutral-900 border-b border-neutral-800 px-4 py-3 space-y-1">
                 <button onClick={() => navigate('account')} className="w-full text-right p-2.5 rounded-xl text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-between">
-                  <span>👤 {currentCustomer ? currentCustomer.email : 'تسجيل دخول العميل وحجوزاتي'}</span>
-                  {googleScoreStats && <span className="bg-amber-500 text-black px-2 py-0.5 rounded-full text-[10px] font-black">{googleScoreStats.totalHours} ساعة</span>}
+                  <span>👤 {currentCustomer ? `${currentCustomer.name} (رصيدك: ${currentCustomer.walletBalance || 0} ج)` : 'تسجيل دخول Google ومحفظتي'}</span>
+                  {googleScoreStats && <span className="bg-amber-500 text-black px-2 py-0.5 rounded-full text-[10px] font-black">{googleScoreStats.totalHours}س</span>}
                 </button>
-                {['home:الرئيسية', 'games:الألعاب', 'devices:الأجهزة', 'booking:الحجز والطلبات', 'pricing:الأسعار والقائمة', 'reviews:التقييمات', 'about:من نحن', 'contact:التواصل', 'admin:لوحة الإدارة 🔒'].map(item => {
+                {['home:الرئيسية', 'devices:الأجهزة والحالة', 'booking:احجز الآن', 'offers:🔥 العروض والباكيدجات', 'games:الألعاب', 'pricing:الأسعار والمنيو', 'reviews:التقييمات', 'contact:التواصل واللوكيشن', 'admin:لوحة الإدارة 🔒'].map(item => {
                   const [id, label] = item.split(':');
                   return <button key={id} onClick={() => navigate(id)} className={`w-full text-right p-2.5 rounded-xl text-xs font-bold ${page === id ? 'bg-amber-500 text-black' : 'text-neutral-300 hover:bg-neutral-800'}`}>{label}</button>;
                 })}
               </div>
             )}
           </header>
-
           <main className="flex-1 max-w-7xl mx-auto px-4 py-6 w-full">
-            {page === 'home' && <HomePage navigate={navigate} googleScoreStats={googleScoreStats} />}
-            {page === 'account' && <CustomerAccountPage currentCustomer={currentCustomer} setCurrentCustomer={setCurrentCustomer} bookings={bookings} googleScoreStats={googleScoreStats} navigate={navigate} setShowGoogleModal={setShowGoogleModal} />}
+            {page === 'home' && <HomePage navigate={navigate} isLoungePacked={isLoungePacked} busyScreensCount={busyScreensCount} devices={devices} googleScoreStats={googleScoreStats} />}
+            {page === 'devices' && <DevicesPage devices={devices} bookings={bookings} sessions={sessions} navigate={navigate} />}
+            {page === 'booking' && <BookingPage devices={devices} bookings={bookings} sessions={sessions} currentCustomer={currentCustomer} setPendingBooking={setPendingBooking} navigate={navigate} setShowQuickMenu={setShowQuickMenu} setSplitBillModal={setSplitBillModal} />}
+            {page === 'offers' && <OffersPage navigate={navigate} />}
+            {page === 'payment' && <PaymentPage pendingBooking={pendingBooking} bookings={bookings} setBookings={setBookings} currentCustomer={currentCustomer} setCurrentCustomer={setCurrentCustomer} navigate={navigate} />}
+            {page === 'account' && <CustomerAccountPage currentCustomer={currentCustomer} setCurrentCustomer={setCurrentCustomer} bookings={bookings} googleScoreStats={googleScoreStats} navigate={navigate} handleGoogleLogin={handleGoogleLogin} now={now} />}
             {page === 'games' && <GamesPage games={games} userHearts={userHearts} toggleHeart={toggleHeart} navigate={navigate} />}
-            {page === 'devices' && <DevicesPage devices={devices} navigate={navigate} />}
-            {page === 'booking' && <BookingPage devices={devices} bookings={bookings} sessions={sessions} currentCustomer={currentCustomer} setPendingBooking={setPendingBooking} navigate={navigate} />}
-            {page === 'payment' && <PaymentPage pendingBooking={pendingBooking} bookings={bookings} setBookings={setBookings} navigate={navigate} />}
             {page === 'pricing' && <PricingPage navigate={navigate} />}
-            {page === 'reviews' && <ReviewsPage reviews={reviews} setReviews={setReviews} />}
-            {page === 'about' && <AboutPage navigate={navigate} />}
+            {page === 'reviews' && <ReviewsPage reviews={reviews} setReviews={setReviews} currentCustomer={currentCustomer} />}
             {page === 'contact' && <ContactPage />}
             {page === 'admin' && (
               <AdminPage 
@@ -291,6 +414,7 @@
                 sessions={sessions} setSessions={setSessions} 
                 completedSales={completedSales} setCompletedSales={setCompletedSales}
                 expenses={expenses} setExpenses={setExpenses}
+                reviews={reviews} setReviews={setReviews}
                 now={now} 
               />
             )}
@@ -298,255 +422,227 @@
 
           <footer className="bg-neutral-900 border-t border-neutral-800 py-8 px-4 text-center sm:text-right space-y-4">
             <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-lg bg-amber-500 text-black flex items-center justify-center font-black">TX</div><span className="font-black text-white text-base">TWIX Gaming Lounge</span></div>
-              <div className="flex gap-4 text-xs text-neutral-400">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-amber-500 text-black flex items-center justify-center font-black">TX</div>
+                <span className="font-black text-white text-base">TWIX Gaming Lounge</span>
+              </div>
+              <div className="flex flex-wrap gap-4 text-xs text-neutral-400 justify-center">
+                <a href={SITE_CONFIG.mapsUrl} target="_blank" className="text-amber-400 font-bold hover:underline flex items-center gap-1">📍 موقع الصالة (GPS)</a>
                 <a href={SITE_CONFIG.social.whatsapp} target="_blank" className="hover:text-emerald-400">واتساب: {SITE_CONFIG.phone}</a>
                 <a href={SITE_CONFIG.social.instagram} target="_blank" className="hover:text-pink-400">Instagram</a>
                 <a href={SITE_CONFIG.social.tiktok} target="_blank" className="hover:text-cyan-400">TikTok</a>
                 <a href={SITE_CONFIG.social.facebook} target="_blank" className="hover:text-blue-400">Facebook</a>
               </div>
             </div>
-            <div className="max-w-7xl mx-auto p-3 bg-neutral-950 border border-neutral-800 rounded-xl text-xs text-neutral-300 text-right leading-relaxed"><strong className="text-amber-400 block mb-0.5">السياسة المعتمدة:</strong>{SITE_CONFIG.legalPolicy}</div>
-            <p className="text-[11px] text-neutral-500 text-center">© 2026 TWIX Gaming Lounge. جميع الحقوق محفوظة.</p>
+            <div className="max-w-7xl mx-auto p-3 bg-neutral-950 border border-neutral-800 rounded-xl text-xs text-neutral-300 text-right leading-relaxed flex flex-col sm:flex-row justify-between items-center gap-2">
+              <div><strong className="text-amber-400">السياسة المعتمدة: </strong>{SITE_CONFIG.legalPolicy}</div>
+              <a href={SITE_CONFIG.mapsUrl} target="_blank" className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-amber-300 rounded-lg text-[11px] font-bold shrink-0">📍 فتح الخريطة بالـ GPS</a>
+            </div>
+            <p className="text-[11px] text-neutral-500 text-center">© 2026 TWIX Gaming Lounge. نظام إدارة وتشغيل الصالات الذكي.</p>
           </footer>
 
           <a href={`${SITE_CONFIG.social.whatsapp}?text=${encodeURIComponent(SITE_CONFIG.whatsappDefaultMessage)}`} target="_blank" className="fixed bottom-5 left-5 z-50 bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-3 rounded-full shadow-2xl font-black text-xs flex items-center gap-2 border-2 border-black/20">
             💬 حجز جديد واستفسار عام
           </a>
 
-          {showGoogleModal && <GoogleModal setShowGoogleModal={setShowGoogleModal} setCurrentCustomer={setCurrentCustomer} />}
+          {showQuickMenu && <QuickMenuModal setShowQuickMenu={setShowQuickMenu} />}
+          {splitBillModal && <SplitBillModal splitBillModal={splitBillModal} setSplitBillModal={setSplitBillModal} />}
         </div>
       );
     }
 
-    function GoogleModal({ setShowGoogleModal, setCurrentCustomer }) {
+    function HomePage({ navigate, isLoungePacked, busyScreensCount, devices, googleScoreStats }) {
       return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-white text-neutral-800 w-full max-w-sm rounded-3xl p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b pb-3">
-              <div className="flex items-center gap-2">
-                <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/></svg>
-                <span className="font-bold text-sm text-neutral-600">تسجيل الدخول عبر Google</span>
+        <div className="space-y-12 py-4 px-2 max-w-7xl mx-auto">
+          {/* مؤشر الزحمة الحي في الوقت الفعلي */}
+          <div className={`p-3.5 rounded-2xl flex flex-col sm:flex-row items-center justify-between border gap-2 transition-all ${isLoungePacked ? 'bg-rose-500/10 border-rose-500/40 text-rose-300' : 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300'}`}>
+            <div className="flex items-center gap-2.5 text-center sm:text-right">
+              <span className="text-lg">{isLoungePacked ? '🔥' : '🟢'}</span>
+              <div>
+                <strong className="text-xs block text-white">{isLoungePacked ? 'الصالة مشتعلة وممتلئة الآن!' : 'الصالة رايقة ومتاحة للعب الفوري!'}</strong>
+                <span className="text-[11px] text-neutral-400">{isLoungePacked ? 'احجز جهازك أونلاين قبل النزول لتضمن دورك ومكانك.' : 'جميع الأجهزة جاهزة لاستقبالك أنت وصحابك بدون أي انتظار.'}</span>
               </div>
-              <button onClick={() => setShowGoogleModal(false)} className="text-neutral-400 hover:text-black font-bold">✕</button>
             </div>
-            <div className="text-center space-y-1">
-              <h3 className="font-bold text-base text-neutral-900">اختر حساباً للمتابعة إلى TWIX</h3>
-              <p className="text-xs text-neutral-500">اربط حسابك لتفعيل سكور الساعات وكسب ساعات لعب مجانية</p>
+            <span className="font-mono text-xs font-black px-3 py-1 bg-black/40 rounded-xl border border-neutral-800">{busyScreensCount} / 4 أجهزة مشغولة الآن</span>
+          </div>
+
+          {/* البانر الترحيبي والأزرار */}
+          <div className="text-center sm:text-right bg-gradient-to-b from-neutral-900 to-neutral-950 p-6 sm:p-12 rounded-3xl border border-neutral-800 space-y-6">
+            <span className="bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs px-3 py-1 rounded-full font-bold">🔥 تجربة الجيمنج الفاخرة الأولى</span>
+            <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-white leading-relaxed">عش متعة التحدي في <span className="text-amber-400 block mt-2">TWIX Gaming Lounge</span></h1>
+            <p className="text-neutral-400 text-xs sm:text-sm max-w-2xl leading-relaxed">شاشات 4K 120Hz، أجهزة PS5 VIP أصلية، ومشروبات وضيافة خاصة مع نظام حجز ذكي يقفل جهازك بالدقيقة.</p>
+            <div className="flex flex-wrap gap-3 justify-center sm:justify-start pt-2">
+              <button onClick={() => navigate('booking')} className="bg-amber-500 hover:bg-amber-400 text-black font-black px-6 py-3 rounded-xl text-xs sm:text-sm shadow-lg shadow-amber-500/20">احجز دورك وطلباتك الآن</button>
+              <button onClick={() => navigate('offers')} className="bg-neutral-800 hover:bg-neutral-700 text-amber-300 font-bold px-5 py-3 rounded-xl text-xs sm:text-sm border border-amber-500/30">🔥 العروض والباكيدجات</button>
+              <a href={SITE_CONFIG.mapsUrl} target="_blank" className="bg-neutral-900 hover:bg-neutral-800 text-neutral-300 font-bold px-4 py-3 rounded-xl text-xs sm:text-sm border border-neutral-700 flex items-center gap-1.5">📍 اللوكيشن GPS</a>
+            </div>
+          </div>
+
+          {/* مميزات المكان والموقع (Why Choose TWIX) */}
+          <div className="space-y-4">
+            <h2 className="text-xl font-black text-white text-center sm:text-right">لماذا تختار TWIX Gaming Lounge؟ 🌟</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl space-y-1.5"><span className="text-2xl block">⚡</span><h3 className="font-bold text-white text-xs">شاشات 120Hz و PS5 VIP</h3><p className="text-[11px] text-neutral-400">أسرع استجابة بدون لاج لمباريات FIFA وeFootball التنافسية.</p></div>
+              <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl space-y-1.5"><span className="text-2xl block">🔒</span><h3 className="font-bold text-white text-xs">حجز مؤكد بالدقيقة</h3><p className="text-[11px] text-neutral-400">جهازك بيتقفل باسمك، هتيجي الصالة تلاقي كرسيك جاهز بدون انتظار.</p></div>
+              <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl space-y-1.5"><span className="text-2xl block">🍜</span><h3 className="font-bold text-white text-xs">كافتيريا وسناكس لطاولتك</h3><p className="text-[11px] text-neutral-400">إندومي بجميع نكهاته، شيبسي، ومشروبات باردة وساخنة تطلبها من مكانك.</p></div>
+              <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl space-y-1.5"><span className="text-2xl block">🎁</span><h3 className="font-bold text-white text-xs">جوائز وساعات مجانية</h3><p className="text-[11px] text-neutral-400">عجلة حظ بعد كل قعدة وسكور ساعات Google يمنحك ساعات لعب هدية.</p></div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    function DevicesPage({ devices, bookings, sessions, navigate }) {
+      return (
+        <div className="max-w-7xl mx-auto py-8 px-4 space-y-6">
+          <div className="text-center sm:text-right space-y-1">
+            <h1 className="text-2xl font-black text-white">الأجهزة ومناطق اللعب</h1>
+            <p className="text-xs text-neutral-400">تابع حالة كل جهاز والوقت المتاح فيه بالدقيقة بدقة تامة</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            {devices.map(d => {
+              const activeSession = sessions.find(s => s.deviceId === d.id);
+              let freeTimeNotice = 'متاح الآن للتشغيل الفوري';
+              if (d.status === 'busy') {
+                if (activeSession && activeSession.timerType === 'fixed') {
+                  const endMs = new Date(activeSession.startTime).getTime() + (activeSession.targetMins * 60000);
+                  freeTimeNotice = `متاح من ${new Date(endMs).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}`;
+                } else {
+                  freeTimeNotice = 'مشغول حالياً بالجلسة المفتوحة';
+                }
+              }
+
+              return (
+                <div key={d.id} className="bg-neutral-900 border border-neutral-800 rounded-3xl overflow-hidden shadow-xl flex flex-col justify-between">
+                  <div className="h-56 relative">
+                    <img src={d.image} className="w-full h-full object-cover" />
+                    <span className={`absolute top-3 right-3 px-3 py-1 rounded-full text-xs font-black shadow-lg ${d.status === 'available' ? 'bg-emerald-500 text-black' : (d.status === 'busy' ? 'bg-amber-500 text-black' : 'bg-rose-500 text-white')}`}>
+                      {d.status === 'available' ? '🟢 متاح الآن' : (d.status === 'busy' ? `🔴 ${freeTimeNotice}` : '⚙️ صيانة')}
+                    </span>
+                    <span className="absolute bottom-3 left-3 bg-black/85 text-amber-400 px-3 py-1.5 rounded-xl text-xs font-black border border-amber-500/30">{d.type} VIP</span>
+                  </div>
+                  <div className="p-5 space-y-3">
+                    <div>
+                      <span className="text-[11px] text-neutral-400 block">{d.zone}</span>
+                      <h3 className="text-lg font-bold text-white">{d.name}</h3>
+                    </div>
+                    <div className="p-2.5 bg-neutral-950 rounded-xl border border-neutral-800 flex justify-between items-center text-xs">
+                      <span className="text-neutral-400">سعر الفردي / الملتي:</span>
+                      <strong className="text-amber-400 font-mono">{d.type === 'PS5' ? '50ج / 60ج (30د)' : '35ج / 45ج (30د)'}</strong>
+                    </div>
+                    <button disabled={d.status !== 'available'} onClick={() => navigate('booking')} className={`w-full py-2.5 rounded-xl text-xs font-black transition-all ${d.status === 'available' ? 'bg-amber-500 text-black hover:bg-amber-400 shadow-lg shadow-amber-500/20' : 'bg-neutral-800 text-neutral-500 cursor-not-allowed'}`}>
+                      {d.status === 'available' ? 'احجز هذا الجهاز الآن' : 'الجهاز غير متاح حالياً'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    function OffersPage({ navigate }) {
+      const offers = [
+        { id: 'off1', title: '🔥 باقة السهرة (Night Owl)', desc: '3 ساعات لعب PS5 VIP بعد منتصف الليل + كانز مياه غازية + إندومي من اختيارك.', price: '220 ج.م', oldPrice: '275 ج.م', badge: 'وفر 55 ج' },
+        { id: 'off2', title: '🎮 باقة الشلة والتحدي (Squad 4P)', desc: 'ساعتان PS5 VIP ملتي (4 دراعات) + 4 كانزات بيبسي مثلجة + 2 شيبسي كبير.', price: '320 ج.م', oldPrice: '390 ج.م', badge: 'الأقوى للشلة' },
+        { id: 'off3', title: '⚡ باقة الساعات الرايقة (Happy Hours)', desc: 'لعب فردي PS4 أو PS5 VIP بخصم 20% يومياً من الساعة 12 ظهراً حتى 4 عصراً.', price: 'خصم 20%', oldPrice: 'السعر الرسمي', badge: 'أوقات التوفير' }
+      ];
+
+      return (
+        <div className="max-w-4xl mx-auto py-8 px-4 space-y-6">
+          <div className="text-center space-y-1">
+            <span className="text-[10px] bg-amber-500/20 text-amber-300 px-3 py-1 rounded-full font-bold">عروض التوفير الحصرية</span>
+            <h1 className="text-2xl font-black text-white">باقات وعروض TWIX المميزة 🔥</h1>
+            <p className="text-xs text-neutral-400">باقات مدروسة تجمع لك اللعب مع المشاريب والسناكس بأوفر سعر في مصر</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {offers.map(off => (
+              <div key={off.id} className="bg-neutral-900 border-2 border-amber-500/30 rounded-3xl p-5 flex flex-col justify-between space-y-4 shadow-xl hover:border-amber-500 transition-all">
+                <div className="space-y-2">
+                  <span className="text-[10px] bg-amber-500 text-black px-2.5 py-0.5 rounded-full font-black inline-block">{off.badge}</span>
+                  <h3 className="font-black text-white text-base">{off.title}</h3>
+                  <p className="text-xs text-neutral-300 leading-relaxed">{off.desc}</p>
+                </div>
+                <div className="space-y-3 pt-3 border-t border-neutral-800">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs line-through text-neutral-500">{off.oldPrice}</span>
+                    <strong className="text-amber-400 text-lg font-black">{off.price}</strong>
+                  </div>
+                  <button onClick={() => navigate('booking')} className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-xl text-xs">احجز الباقة الآن</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    function QuickMenuModal({ setShowQuickMenu }) {
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl max-h-[85vh] overflow-y-auto no-scrollbar">
+            <div className="flex justify-between items-center border-b border-neutral-800 pb-2">
+              <h3 className="font-bold text-white text-sm">📜 قائمة الأسعار والمنيو المعتمدة</h3>
+              <button onClick={() => setShowQuickMenu(false)} className="text-neutral-400 hover:text-white font-bold">✕</button>
+            </div>
+            <div className="space-y-3 text-xs">
+              <div className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-1.5">
+                <strong className="text-amber-400 block border-b border-neutral-800 pb-1">🎮 أجهزة البلايستيشن:</strong>
+                <div className="flex justify-between"><span>PS4 Pro فردي:</span><strong>35 ج (30د) / 70 ج (ساعة)</strong></div>
+                <div className="flex justify-between"><span>PS4 Pro ملتي (4):</span><strong>45 ج (30د) / 90 ج (ساعة)</strong></div>
+                <div className="flex justify-between"><span>PS5 VIP فردي:</span><strong>50 ج (30د) / 100 ج (ساعة)</strong></div>
+                <div className="flex justify-between"><span>PS5 VIP ملتي (4):</span><strong>60 ج (30د) / 120 ج (ساعة)</strong></div>
+              </div>
+              <div className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-1.5">
+                <strong className="text-amber-400 block border-b border-neutral-800 pb-1">🍜 الكافتيريا والسناكس:</strong>
+                {SNACKS_MENU.map(s => (
+                  <div key={s.id} className="flex justify-between items-center">
+                    <span>{s.icon} {s.name}</span>
+                    <strong className="text-white">{s.price} ج.م</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <button onClick={() => setShowQuickMenu(false)} className="w-full py-2.5 bg-amber-500 text-black font-black rounded-xl text-xs">إغلاق المنيو</button>
+          </div>
+        </div>
+      );
+    }
+
+    function SplitBillModal({ splitBillModal, setSplitBillModal }) {
+      const [count, setCount] = useState(4);
+      const total = splitBillModal.total || 0;
+      const perPerson = Math.ceil(total / count);
+
+      const shareText = `يا شباب، حجزنا في TWIX Gaming Lounge جاهز 🎮!\nالمبلغ الإجمالي: ${total} ج.م\n👥 قطية كل واحد فينا بالملي: ${perPerson} ج.م فقط.\nيلا نتقابل في الصالة!`;
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl text-center">
+            <div className="flex justify-between items-center border-b border-neutral-800 pb-2">
+              <h3 className="font-bold text-white text-xs">👥 حاسبة قِطيّة الشلة</h3>
+              <button onClick={() => setSplitBillModal(null)} className="text-neutral-400 hover:text-white font-bold">✕</button>
             </div>
             <div className="space-y-2">
-              {[
-                { email: 'player.twix@gmail.com', name: 'أحمد محمود', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80' },
-                { email: 'gamer.pro2026@gmail.com', name: 'كريم الجيمر', avatar: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80' }
-              ].map((acc, i) => (
-                <div key={i} onClick={() => { setCurrentCustomer({ email: acc.email, name: acc.name, avatar: acc.avatar, authProvider: 'google' }); setShowGoogleModal(false); }} className="p-3 border rounded-2xl flex items-center gap-3 cursor-pointer hover:bg-neutral-50 transition-colors">
-                  <img src={acc.avatar} className="w-10 h-10 rounded-full object-cover" />
-                  <div className="text-right"><span className="font-bold text-xs text-neutral-900 block">{acc.name}</span><span className="text-[11px] text-neutral-500 block">{acc.email}</span></div>
-                </div>
-              ))}
+              <span className="text-xs text-neutral-400">حدد عدد الشباب المشتركين في الحساب:</span>
+              <div className="flex items-center justify-center gap-4 bg-neutral-950 p-2 rounded-2xl border border-neutral-800">
+                <button onClick={() => setCount(Math.max(2, count - 1))} className="w-8 h-8 bg-neutral-800 text-white font-black rounded-xl">-</button>
+                <strong className="text-lg text-white font-black">{count} شباب</strong>
+                <button onClick={() => setCount(count + 1)} className="w-8 h-8 bg-amber-500 text-black font-black rounded-xl">+</button>
+              </div>
             </div>
-            <button onClick={() => { const custom = prompt("أدخل بريدك الإلكتروني لـ Google:", "gamer@gmail.com"); if (custom && custom.includes('@')) { setCurrentCustomer({ email: custom.trim().toLowerCase(), name: custom.split('@')[0], avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80', authProvider: 'google' }); setShowGoogleModal(false); } }} className="w-full text-center text-xs text-blue-600 font-bold hover:underline pt-1">استخدام حساب Google آخر...</button>
+            <div className="p-3 bg-neutral-950 rounded-2xl border border-amber-500/30">
+              <span className="text-[11px] text-neutral-400 block">نصيب كل واحد منكم:</span>
+              <strong className="text-2xl font-black text-amber-400 font-mono">{perPerson} ج.م</strong>
+            </div>
+            <a href={`https://wa.me/?text=${encodeURIComponent(shareText)}`} target="_blank" className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md">
+              📲 إرسال الحسبة لجروب واتساب الشلة
+            </a>
           </div>
         </div>
       );
     }
-    function CustomerAccountPage({ currentCustomer, setCurrentCustomer, bookings, googleScoreStats, navigate, setShowGoogleModal }) {
-      const [emailInput, setEmailInput] = useState('');
-      const [nameInput, setNameInput] = useState('');
-
-      const handleEmailLogin = (e) => {
-        e.preventDefault();
-        if (!emailInput.trim()) return;
-        setCurrentCustomer({ email: emailInput.trim().toLowerCase(), name: nameInput.trim() || emailInput.split('@')[0], avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80', authProvider: 'email' });
-      };
-
-      const myBookings = bookings.filter(b => currentCustomer && ((b.email && b.email.toLowerCase() === currentCustomer.email.toLowerCase()) || b.customerName === currentCustomer.name));
-
-      if (!currentCustomer) {
-        return (
-          <div className="max-w-md mx-auto py-12 px-4 space-y-6">
-            <div className="text-center space-y-2">
-              <div className="w-14 h-14 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-center mx-auto text-2xl">👤</div>
-              <h1 className="text-2xl font-black text-white">بوابة حسابات عملاء TWIX</h1>
-              <p className="text-xs text-neutral-400">سجل دخول بحساب Google لتفعيل سكور الساعات وتجميع ساعات لعب مجانية!</p>
-            </div>
-            <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 space-y-4 shadow-xl">
-              <button type="button" onClick={() => setShowGoogleModal(true)} className="w-full py-3.5 bg-neutral-800 hover:bg-neutral-700 text-white font-bold rounded-2xl text-xs flex items-center justify-center gap-3 border border-amber-500/30 transition-all shadow-lg">
-                <span className="text-rose-400 font-black text-base">G</span>
-                <span>تسجيل الدخول بحساب Google (تفعيل السكور 🎁)</span>
-              </button>
-              <div className="flex items-center gap-3 text-neutral-600 text-xs"><span className="h-px bg-neutral-800 flex-1"></span><span>أو تسجيل كزائر بالبريد العادي</span><span className="h-px bg-neutral-800 flex-1"></span></div>
-              <form onSubmit={handleEmailLogin} className="space-y-3">
-                <input type="email" required placeholder="name@example.com" value={emailInput} onChange={e => setEmailInput(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-xs text-white focus:border-amber-500" />
-                <input type="text" placeholder="اسم اللاعب (اختياري)" value={nameInput} onChange={e => setNameInput(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-xs text-white focus:border-amber-500" />
-                <button type="submit" className="w-full py-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold rounded-xl text-xs">دخول زائر</button>
-              </form>
-            </div>
-          </div>
-        );
-      }
-
-      return (
-        <div className="max-w-4xl mx-auto py-10 px-4 space-y-6">
-          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-4 text-center sm:text-right">
-              <img src={currentCustomer.avatar} className="w-14 h-14 rounded-2xl object-cover border border-amber-500/40" />
-              <div>
-                <h2 className="text-lg font-black text-white">{currentCustomer.name}</h2>
-                <span className="text-xs text-neutral-400 block">{currentCustomer.email}</span>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-block mt-1 ${currentCustomer.authProvider === 'google' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-neutral-800 text-neutral-400'}`}>
-                  {currentCustomer.authProvider === 'google' ? '✓ حساب موثق بـ Google (مفعل لنظام الجوائز)' : 'حساب زائر'}
-                </span>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => navigate('booking')} className="bg-amber-500 text-black font-bold px-4 py-2 rounded-xl text-xs">+ حجز جديد</button>
-              <button onClick={() => setCurrentCustomer(null)} className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-4 py-2 rounded-xl text-xs">خروج</button>
-            </div>
-          </div>
-
-          {googleScoreStats && (
-            <div className="bg-gradient-to-r from-amber-500/20 via-neutral-900 to-amber-500/10 border-2 border-amber-500/40 rounded-3xl p-6 space-y-4 shadow-xl">
-              <div className="flex justify-between items-center"><span className="text-amber-400 text-xs font-black">🎮 نظام مكافآت TWIX GOOGLE GAMERS</span><span className="text-white font-black text-sm">ساعات اللعب: {googleScoreStats.totalHours} ساعة</span></div>
-              {googleScoreStats.freeHoursEarned > 0 && <div className="bg-amber-500 text-black px-4 py-1.5 rounded-full text-xs font-black inline-block animate-bounce">🎁 كسبت {googleScoreStats.freeHoursEarned} ساعة لعب مجانية جاهزة للصرف في الصالة!</div>}
-              <div className="w-full bg-neutral-950 rounded-full h-3.5 p-0.5 border border-neutral-800"><div className="bg-amber-500 h-full rounded-full transition-all duration-500" style={{ width: `${Math.min(100, (googleScoreStats.progressInTier / 24) * 100)}%` }}></div></div>
-              <p className="text-[11px] text-neutral-400">فاضلك {googleScoreStats.remainingToReward} ساعة لعب فقط وتفتح ساعتك الهدية القادمة!</p>
-            </div>
-          )}
-
-          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 space-y-4">
-            <h3 className="font-bold text-white text-sm border-b border-neutral-800 pb-3">سجل حجوزاتك ({myBookings.length}):</h3>
-            {myBookings.length === 0 ? <p className="text-neutral-500 text-xs py-8 text-center">لا توجد حجوزات مسجلة بعد.</p> : (
-              <div className="space-y-4">{myBookings.map(b => (
-                <div key={b.id} className="p-4 bg-neutral-950 border border-neutral-800 rounded-2xl text-xs space-y-3">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <span className="text-amber-400 font-mono font-bold">{b.ref}</span> — <span className="text-white font-bold">{b.items ? b.items.map(i => `${i.deviceType} (${i.mode === 'multi' ? 'ملتي' : 'فردي'})`).join('+') : 'جلسة'}</span>
-                      {b.snacksSummary && <div className="text-[11px] text-amber-300 mt-0.5">مشاريب: {b.snacksSummary}</div>}
-                      <div className="text-[10px] text-neutral-500 mt-0.5">{b.date} - {b.time}</div>
-                    </div>
-                    <div className="text-left">
-                      <span className="text-white font-bold block">{b.totalCost} ج.م</span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${b.status === 'confirmed' ? 'bg-emerald-500/20 text-emerald-400' : (b.status === 'rejected' ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-500/20 text-amber-400')}`}>
-                        {b.status === 'confirmed' ? 'مؤكد ✅' : (b.status === 'rejected' ? 'مرفوض ❌' : 'بانتظار الإدارة ⏳')}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="p-3 bg-neutral-900/80 border border-amber-500/30 rounded-xl space-y-2">
-                    <p className="text-[10px] text-amber-200 leading-relaxed">
-                      ⚠️ <strong className="text-amber-400">تنبيه خدمة العملاء:</strong> لو واجهتك أي مشكلة في الدفع، أو حابب تعدل أو تستفسر عن حجزك، اضغط على زر المساعدة أدناه ليرفق رقم طلبك تلقائياً للإدارة. (لا تستخدم الزر العائم لأنه مخصص للحجز والاستفسار العام فقط).
-                    </p>
-                    <a
-                      href={`https://wa.me/201289333316?text=${encodeURIComponent(
-                        `السلام عليكم يا إدارة TWIX 🎮\nبخصوص الحجز بتاعي اللي عملته من الموقع:\n📌 رقم الحجز: ${b.ref}\n👤 الاسم: ${b.customerName}\n💰 المبلغ: ${b.totalCost} ج.م\nحابب أستفسر / أعدل بخصوص الحجز ده.`
-                      )}`}
-                      target="_blank"
-                      className="w-full py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-lg text-xs flex items-center justify-center gap-1.5 transition-all shadow-md"
-                    >
-                      💬 تواصل للمساعدة بخصوص هذا الطلب ({b.ref})
-                    </a>
-                  </div>
-                </div>
-              ))}</div>
-            )}
-          </div>
-        </div>
-      );
-    }
-
-    function HomePage({ navigate, googleScoreStats }) {
-      return (
-        <div className="space-y-16 py-8 px-4 max-w-7xl mx-auto">
-          <div className="text-center sm:text-right bg-gradient-to-b from-neutral-900 to-neutral-950 p-6 sm:p-12 rounded-3xl border border-neutral-800 space-y-6">
-            <span className="bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs px-3 py-1 rounded-full font-bold">🔥 وجهة الألعاب الفاخرة الأولى</span>
-            <h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-white leading-relaxed">عش متعة التحدي في <span className="text-amber-400 block mt-3 tracking-wider">TWIX Gaming Lounge</span></h1>
-            <p className="text-neutral-400 text-sm max-w-2xl leading-relaxed">أجهزة PS5 VIP وشاشات 120Hz، نظام حجز أونلاين ذكي يقفل الأجهزة تلقائياً، ومشروبات وضيافة خاصة.</p>
-            <div className="flex flex-wrap gap-3 justify-center sm:justify-start pt-2">
-              <button onClick={() => navigate('booking')} className="bg-amber-500 hover:bg-amber-400 text-black font-black px-6 py-3 rounded-xl text-sm shadow-lg shadow-amber-500/20">احجز جهازك وطلباتك الآن</button>
-              <button onClick={() => navigate('account')} className="bg-neutral-800 hover:bg-neutral-700 text-white font-bold px-6 py-3 rounded-xl text-sm border border-neutral-700">👤 حسابي والسكور {googleScoreStats ? `(${googleScoreStats.totalHours}س)` : ''}</button>
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <h2 className="text-2xl font-black text-white text-center sm:text-right">قائمة الأسعار المعتمدة</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 max-w-4xl mx-auto">
-              <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-3xl space-y-4">
-                <span className="text-xs bg-neutral-800 px-3 py-1 rounded-full text-neutral-300 font-bold">الفئة القياسية</span>
-                <h3 className="text-xl font-black text-white">PlayStation 4</h3>
-                <div className="space-y-2 border-t border-neutral-800 pt-3 text-xs">
-                  <div className="flex justify-between items-center"><span className="text-neutral-300 font-bold">فردي (مع صديق - ذراعين):</span> <strong className="text-amber-400 text-sm">30 ج / 30د (60 ج / ساعة)</strong></div>
-                  <div className="flex justify-between items-center"><span className="text-neutral-300 font-bold">ملتي (4 ذراعات):</span> <strong className="text-amber-400 text-sm">40 ج / 30د (80 ج / ساعة)</strong></div>
-                </div>
-                <button onClick={() => navigate('booking')} className="w-full py-2.5 bg-neutral-800 hover:bg-neutral-700 text-white font-bold rounded-xl text-xs">حجز PS4</button>
-              </div>
-
-              <div className="bg-neutral-900 border-2 border-amber-500/40 p-6 rounded-3xl space-y-4 relative">
-                <span className="text-xs bg-amber-500 text-black px-3 py-1 rounded-full font-black">الأكثر طلباً VIP</span>
-                <h3 className="text-xl font-black text-white">PlayStation 5 VIP</h3>
-                <div className="space-y-2 border-t border-neutral-800 pt-3 text-xs">
-                  <div className="flex justify-between items-center"><span className="text-neutral-300 font-bold">فردي (مع صديق - ذراعين):</span> <strong className="text-amber-400 text-sm">40 ج / 30د (80 ج / ساعة)</strong></div>
-                  <div className="flex justify-between items-center"><span className="text-neutral-300 font-bold">ملتي (4 ذراعات):</span> <strong className="text-amber-400 text-sm">50 ج / 30د (100 ج / ساعة)</strong></div>
-                </div>
-                <button onClick={() => navigate('booking')} className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-xl text-xs">حجز PS5 VIP</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    function GamesPage({ games, userHearts, toggleHeart, navigate }) {
-      return (
-        <div className="max-w-7xl mx-auto py-8 px-4 space-y-6">
-          <div className="flex justify-between items-center"><h1 className="text-2xl font-black text-white">مكتبة ألعاب TWIX</h1><span className="text-xs text-amber-400 font-bold">المفضلة: {userHearts.length}/2</span></div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-            {games.map(game => (
-              <div key={game.id} className="bg-neutral-900 border border-neutral-800 rounded-3xl overflow-hidden flex flex-col justify-between">
-                <div>
-                  <div className="h-44 relative">
-                    <img src={game.image} className="w-full h-full object-cover" />
-                    <button onClick={() => toggleHeart(game.id)} className={`absolute top-3 left-3 p-2 rounded-full text-sm backdrop-blur-md ${userHearts.includes(game.id) ? 'bg-rose-500 text-white scale-110' : 'bg-black/60 text-white'}`}>❤️</button>
-                    <span className="absolute bottom-2 right-2 bg-black/80 px-2.5 py-1 rounded-full text-[10px] font-bold text-amber-400">{game.hearts} إعجاب</span>
-                  </div>
-                  <div className="p-4 space-y-1"><span className="text-[10px] text-amber-400 font-bold">{game.category}</span><h3 className="font-bold text-white text-base">{game.title}</h3><p className="text-xs text-neutral-400 line-clamp-2">{game.desc}</p></div>
-                </div>
-                <div className="p-4 pt-0"><button onClick={() => navigate('booking')} className="w-full py-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded-xl text-xs font-bold">احجز لتجربة اللعبة</button></div>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-
-    function DevicesPage({ devices, navigate }) {
-      return (
-        <div className="max-w-7xl mx-auto py-8 px-4 space-y-6">
-          <h1 className="text-2xl font-black text-white">الأجهزة ومناطق اللعب</h1>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            {devices.map(d => (
-              <div key={d.id} className="bg-neutral-900 border border-neutral-800 rounded-3xl overflow-hidden">
-                <div className="h-56 relative">
-                  <img src={d.image} className="w-full h-full object-cover" />
-                  <span className={`absolute top-3 right-3 px-3 py-1 rounded-full text-xs font-bold ${d.status === 'available' ? 'bg-emerald-500 text-black' : (d.status === 'busy' ? 'bg-amber-500 text-black' : 'bg-rose-500 text-white')}`}>
-                    {d.status === 'available' ? 'متاح الآن' : (d.status === 'busy' ? 'مشغول حالياً بالصالة' : 'صيانة')}
-                  </span>
-                  <span className="absolute bottom-3 left-3 bg-black/80 text-amber-400 px-3 py-1 rounded-xl text-xs font-black">{d.type}</span>
-                </div>
-                <div className="p-5 space-y-2">
-                  <span className="text-xs text-neutral-400 block">{d.zone}</span>
-                  <h3 className="text-lg font-bold text-white">{d.name}</h3>
-                  <button disabled={d.status !== 'available'} onClick={() => navigate('booking')} className={`w-full py-2.5 rounded-xl text-xs font-bold mt-2 ${d.status === 'available' ? 'bg-amber-500 text-black hover:bg-amber-400' : 'bg-neutral-800 text-neutral-500 cursor-not-allowed'}`}>
-                    {d.status === 'available' ? 'حجز هذا الجهاز' : 'غير متاح حالياً'}
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-
-    function BookingPage({ devices, bookings, sessions, currentCustomer, setPendingBooking, navigate }) {
+    function BookingPage({ devices, bookings, sessions, currentCustomer, setPendingBooking, navigate, setShowQuickMenu, setSplitBillModal }) {
       const [name, setName] = useState(currentCustomer ? currentCustomer.name : '');
       const [email, setEmail] = useState(currentCustomer ? currentCustomer.email : '');
       const [phone, setPhone] = useState('');
@@ -554,16 +650,17 @@
       const [time, setTime] = useState('16:00');
       const [policyChecked, setPolicyChecked] = useState(false);
       const [errorMsg, setErrorMsg] = useState(null);
-      const [items, setItems] = useState([{ deviceType: 'PS5', mode: 'single', duration: 60 }]);
-      const [snacks, setSnacks] = useState({ indomie: 0, tea: 0, coffee: 0 });
+      
+      const [items, setItems] = useState([{ deviceType: 'PS5', mode: 'single', duration: 30 }]);
+      const [snacks, setSnacks] = useState({});
 
       const updateSnackQty = (id, delta) => setSnacks(prev => ({ ...prev, [id]: Math.max(0, (prev[id] || 0) + delta) }));
-      const addItem = () => setItems([...items, { deviceType: 'PS4', mode: 'single', duration: 60 }]);
+      const addItem = () => setItems([...items, { deviceType: 'PS4', mode: 'single', duration: 30 }]);
       const removeItem = (idx) => items.length > 1 && setItems(items.filter((_, i) => i !== idx));
       const updateItem = (idx, field, val) => { const next = [...items]; next[idx][field] = val; setItems(next); setErrorMsg(null); };
 
       const devicesTotal = items.reduce((sum, itm) => sum + calcPrice(itm.deviceType, itm.mode, itm.duration), 0);
-      const snacksTotal = SNACKS_MENU.reduce((sum, s) => sum + (snacks[s.id] * s.price), 0);
+      const snacksTotal = SNACKS_MENU.reduce((sum, s) => sum + ((snacks[s.id] || 0) * s.price), 0);
       const grandTotal = devicesTotal + snacksTotal;
 
       const validateCapacity = () => {
@@ -579,7 +676,7 @@
             b.items && b.items.forEach(bItem => {
               if (bItem.deviceType === type) {
                 const bStart = new Date(`${b.date}T${b.time}:00`).getTime();
-                const bEnd = bStart + (bItem.duration * 60 * 1000);
+                const bEnd = bStart + ((bItem.duration || 30) * 60 * 1000);
                 if (reqStart < bEnd && (reqStart + itm.duration * 60 * 1000) > bStart) { 
                   bookedCount++; 
                   if (bEnd > latestEndMs) latestEndMs = bEnd; 
@@ -604,13 +701,14 @@
 
       const handleProceed = (e) => {
         e.preventDefault(); setErrorMsg(null);
-        if (!name || !phone) return setErrorMsg("يرجى كتابة الاسم ورقم الهاتف.");
+        if (!name.trim()) return setErrorMsg("يرجى كتابة اسم العميل.");
+        if (!validateEgyptianPhone(phone)) return setErrorMsg("يرجى كتابة رقم هاتف مصري صحيح (010, 011, 012, 015) مكون من 11 رقم.");
         if (!policyChecked) return setErrorMsg("يجب الموافقة الصريحة على شروط وسياسة الحجز.");
         const check = validateCapacity();
         if (!check.valid) return setErrorMsg(check.error);
 
         const snacksSummaryArr = [];
-        SNACKS_MENU.forEach(s => { if (snacks[s.id] > 0) snacksSummaryArr.push(`${s.name} x${snacks[s.id]}`); });
+        SNACKS_MENU.forEach(s => { if ((snacks[s.id] || 0) > 0) snacksSummaryArr.push(`${s.name} x${snacks[s.id]}`); });
 
         setPendingBooking({
           id: `bk-${Date.now()}`, ref: `TWIX-${Math.floor(100000 + Math.random() * 900000)}`,
@@ -622,25 +720,33 @@
       };
 
       return (
-        <div className="max-w-2xl mx-auto py-8 px-4 space-y-6">
-          <div className="text-center space-y-1">
-            <h1 className="text-2xl font-black text-white">حجز جلسة لعب في TWIX</h1>
-            <p className="text-xs text-neutral-400">حدد أجهزتك ونوع اللعب ومشاريبك وتُقفل الأجهزة فوراً بدون أي تعارض</p>
+        <div className="max-w-2xl mx-auto py-6 px-4 space-y-5">
+          <div className="flex justify-between items-center bg-neutral-900 p-4 rounded-3xl border border-neutral-800">
+            <div>
+              <h1 className="text-xl font-black text-white">حجز جلسة في TWIX 🎮</h1>
+              <p className="text-[11px] text-neutral-400">الحجز المبدئي أقصاه 30د لمنع التعارض وتمدد بالصالة براحتك</p>
+            </div>
+            <button type="button" onClick={() => setShowQuickMenu(true)} className="px-3 py-2 bg-neutral-800 hover:bg-neutral-700 text-amber-300 font-bold rounded-xl text-xs border border-amber-500/30">
+              📜 المنيو السريع
+            </button>
           </div>
-          {errorMsg && <div className="p-4 bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs rounded-2xl">⚠️ {errorMsg}</div>}
-          <form onSubmit={handleProceed} className="bg-neutral-900 border border-neutral-800 p-6 rounded-3xl space-y-5">
+
+          {errorMsg && <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs rounded-2xl">⚠️ {errorMsg}</div>}
+
+          <form onSubmit={handleProceed} className="bg-neutral-900 border border-neutral-800 p-6 rounded-3xl space-y-5 shadow-xl">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <input required value={name} onChange={e => setName(e.target.value)} placeholder="اسم العميل *" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-xs text-white" />
-              <input required value={phone} onChange={e => setPhone(e.target.value)} placeholder="رقم الهاتف *" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-xs text-white text-left" />
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="إيميل Google (للسكور)" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-xs text-white" />
+              <input required value={phone} onChange={e => setPhone(e.target.value)} placeholder="رقم الهاتف (01xxxxxxxxx) *" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-xs text-white text-left font-mono" />
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="إيميل Google (للسكور والمكافآت)" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-xs text-white" />
             </div>
+
             <div className="grid grid-cols-2 gap-3">
-              <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-xs text-white" />
-              <input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-xs text-white" />
+              <div><label className="text-[10px] text-neutral-400 block mb-1">تاريخ الحجز:</label><input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-xs text-white" /></div>
+              <div><label className="text-[10px] text-neutral-400 block mb-1">وقت البدء:</label><input type="time" value={time} onChange={e => setTime(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-xs text-white" /></div>
             </div>
 
             <div className="space-y-3 pt-2">
-              <div className="flex justify-between items-center"><span className="text-xs font-bold text-amber-400">🎮 الأجهزة ونوع اللعب:</span><button type="button" onClick={addItem} className="text-xs bg-neutral-800 hover:bg-neutral-700 text-amber-400 px-3 py-1 rounded-lg font-bold">+ جهاز إضافي</button></div>
+              <div className="flex justify-between items-center"><span className="text-xs font-bold text-amber-400">🎮 اختيار الأجهزة ونمط اللعب:</span><button type="button" onClick={addItem} className="text-xs bg-neutral-800 hover:bg-neutral-700 text-amber-400 px-3 py-1 rounded-lg font-bold">+ جهاز إضافي</button></div>
               {items.map((itm, i) => (
                 <div key={i} className="p-3 bg-neutral-950 border border-neutral-800 rounded-2xl flex flex-wrap items-center justify-between gap-2">
                   <select value={itm.deviceType} onChange={e => updateItem(i, 'deviceType', e.target.value)} className="bg-neutral-900 border border-neutral-800 rounded-xl p-2 text-xs text-white font-bold">
@@ -649,61 +755,60 @@
                   </select>
                   <select value={itm.mode} onChange={e => updateItem(i, 'mode', e.target.value)} className="bg-neutral-900 border border-neutral-800 rounded-xl p-2 text-xs text-amber-300 font-bold">
                     <option value="single">فردي (مع صديق - ذراعين)</option>
-                    <option value="multi">ملتي (4 ذراعات)</option>
+                    <option value="multi">ملتي (4 ذراعات - شلة)</option>
                   </select>
-                  <select value={itm.duration} onChange={e => updateItem(i, 'duration', Number(e.target.value))} className="bg-neutral-900 border border-neutral-800 rounded-xl p-2 text-xs text-white">
-                    <option value={30}>30 دقيقة</option>
-                    <option value={60}>60 دقيقة (ساعة)</option>
-                    <option value={90}>90 دقيقة (ساعة ونصف)</option>
-                    <option value={120}>120 دقيقة (ساعتان)</option>
-                  </select>
+                  <span className="text-xs text-neutral-300 font-bold px-2 py-1 bg-neutral-900 rounded-lg">30 دقيقة مبدئية</span>
                   {items.length > 1 && <button type="button" onClick={() => removeItem(i)} className="text-rose-400 text-xs px-2">حذف</button>}
                 </div>
               ))}
             </div>
 
             <div className="space-y-3 pt-2 border-t border-neutral-800">
-              <div className="flex justify-between items-center"><span className="text-xs font-bold text-amber-400">☕ المشاريب والمأكولات (اختياري):</span><span className="text-[11px] text-neutral-400">إجمالي الطلبات: {snacksTotal} ج.م</span></div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="flex justify-between items-center"><span className="text-xs font-bold text-amber-400">☕ الكافتيريا والسناكس (اختياري لطاولتك):</span><span className="text-[11px] text-neutral-400">إجمالي الطلبات: {snacksTotal} ج.م</span></div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                 {SNACKS_MENU.map(snack => (
-                  <div key={snack.id} className="p-3 bg-neutral-950 border border-neutral-800 rounded-2xl flex flex-col justify-between space-y-2">
-                    <div className="flex justify-between items-center"><span className="text-xs font-bold text-white">{snack.icon} {snack.name}</span><span className="text-[11px] text-amber-400 font-bold">{snack.price} ج.م</span></div>
+                  <div key={snack.id} className="p-2.5 bg-neutral-950 border border-neutral-800 rounded-2xl flex flex-col justify-between space-y-2">
+                    <div className="flex justify-between items-center"><span className="text-xs font-bold text-white truncate">{snack.icon} {snack.name}</span><span className="text-[11px] text-amber-400 font-bold">{snack.price}ج</span></div>
                     <div className="flex items-center justify-between bg-neutral-900 rounded-xl p-1 border border-neutral-800">
-                      <button type="button" onClick={() => updateSnackQty(snack.id, -1)} className="w-7 h-7 bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg flex items-center justify-center font-bold text-sm">-</button>
+                      <button type="button" onClick={() => updateSnackQty(snack.id, -1)} className="w-6 h-6 bg-neutral-800 text-white rounded-lg flex items-center justify-center font-bold text-xs">-</button>
                       <span className="text-xs font-bold text-white">{snacks[snack.id] || 0}</span>
-                      <button type="button" onClick={() => updateSnackQty(snack.id, 1)} className="w-7 h-7 bg-amber-500 hover:bg-amber-400 text-black rounded-lg flex items-center justify-center font-bold text-sm">+</button>
+                      <button type="button" onClick={() => updateSnackQty(snack.id, 1)} className="w-6 h-6 bg-amber-500 text-black rounded-lg flex items-center justify-center font-bold text-xs">+</button>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="p-3 bg-neutral-950 border border-neutral-800 rounded-xl flex justify-between items-center text-sm">
-              <div><span className="text-neutral-400 text-xs block">إجمالي الحجز الشامل:</span><span className="text-[10px] text-neutral-500">أجهزة: {devicesTotal} ج | مشاريب: {snacksTotal} ج</span></div>
-              <strong className="text-amber-400 text-lg">{grandTotal} ج.م</strong>
+            <div className="p-3 bg-neutral-950 border border-neutral-800 rounded-2xl flex flex-wrap justify-between items-center text-xs gap-2">
+              <div><span className="text-neutral-400 block">إجمالي الحجز الشامل:</span><span className="text-[10px] text-neutral-500">أجهزة: {devicesTotal} ج | طلبات: {snacksTotal} ج</span></div>
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={() => setSplitBillModal({ total: grandTotal })} className="px-2.5 py-1.5 bg-neutral-800 hover:bg-neutral-700 text-amber-300 font-bold rounded-xl text-[11px] border border-amber-500/30">👥 قطية الشلة</button>
+                <strong className="text-amber-400 text-lg font-black">{grandTotal} ج.م</strong>
+              </div>
             </div>
 
-            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl space-y-2">
-              <p className="text-[11px] text-amber-200 leading-relaxed">{SITE_CONFIG.legalPolicy}</p>
-              <label className="flex items-center gap-2 pt-2 border-t border-amber-500/20 cursor-pointer">
-                <input type="checkbox" checked={policyChecked} onChange={e => setPolicyChecked(e.target.checked)} />
-                <span className="text-xs font-bold text-amber-300">أوافق صراحة على شروط وسياسة الحجز</span>
-              </label>
-            </div>
+            <label className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl cursor-pointer">
+              <input type="checkbox" checked={policyChecked} onChange={e => setPolicyChecked(e.target.checked)} />
+              <span className="text-[11px] font-bold text-amber-200">أوافق صراحة على شروط وسياسة الحجز المعتمدة بـ TWIX</span>
+            </label>
             
-            <button type="submit" className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-xl text-sm shadow-lg shadow-amber-500/20">المتابعة إلى الدفع الأونلاين ({grandTotal} ج.م)</button>
+            <button type="submit" className="w-full py-3.5 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-xl text-sm shadow-lg shadow-amber-500/20">المتابعة إلى الدفع والتأكيد ({grandTotal} ج.م)</button>
           </form>
         </div>
       );
-                }
-    function PaymentPage({ pendingBooking, bookings, setBookings, navigate }) {
+              }
+    function PaymentPage({ pendingBooking, bookings, setBookings, currentCustomer, setCurrentCustomer, navigate }) {
       if (!pendingBooking) return <div className="text-center py-20"><button onClick={() => navigate('booking')} className="bg-amber-500 text-black font-bold px-4 py-2 rounded-xl text-xs">الذهاب للحجز</button></div>;
       
       const [selectedWallet, setSelectedWallet] = useState('vodafone');
+      const [senderPhone, setSenderPhone] = useState('');
       const [copied, setCopied] = useState(false);
       const [receiptImage, setReceiptImage] = useState(null);
       const [paid, setPaid] = useState(false);
       const [uploading, setUploading] = useState(false);
+      const [errorMsg, setErrorMsg] = useState('');
+
+      const canPayWithWallet = currentCustomer && (currentCustomer.walletBalance || 0) >= pendingBooking.totalCost;
 
       const handleCopyNumber = () => {
         navigator.clipboard.writeText("01289333316");
@@ -711,64 +816,107 @@
         setTimeout(() => setCopied(false), 2500);
       };
 
-      const handleImageUpload = (e) => {
+      const handleImageUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        if (file.size > 5 * 1024 * 1024) return alert("حجم الصورة كبير جداً، اختر صورة أقل من 5 ميجابايت.");
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setReceiptImage(reader.result);
+        try {
+          const compressed = await compressImage(file);
+          setReceiptImage(compressed);
+          setErrorMsg('');
+        } catch(err) {
+          setErrorMsg('تعذر معالجة الصورة، اختر صورة أخرى.');
+        }
+      };
+
+      const handleWalletPayment = () => {
+        if (!canPayWithWallet) return;
+        setUploading(true);
+        const newBalance = currentCustomer.walletBalance - pendingBooking.totalCost;
+        const finalBooking = {
+          ...pendingBooking,
+          paymentMethod: 'twix_wallet',
+          senderPhone: currentCustomer.email,
+          status: 'confirmed',
+          createdAt: new Date().toISOString()
         };
-        reader.readAsDataURL(file);
+
+        db.collection('bookings').doc(pendingBooking.id).set(finalBooking).then(() => {
+          db.collection('customers').doc(currentCustomer.email).update({ walletBalance: newBalance });
+          const updatedCustomer = { ...currentCustomer, walletBalance: newBalance };
+          setCurrentCustomer(updatedCustomer);
+          localStorage.setItem('twix_customer', JSON.stringify(updatedCustomer));
+          setBookings([finalBooking, ...bookings]);
+          setPaid(true);
+          setUploading(false);
+        }).catch(err => {
+          console.error(err);
+          setUploading(false);
+        });
       };
 
       const handleSubmitPayment = () => {
+        setErrorMsg('');
+        if (!validateEgyptianPhone(senderPhone)) {
+          return setErrorMsg("يجب إدخال رقم المحفظة التي قمت بالتحويل منها (010, 011, 012, 015) مكون من 11 رقماً.");
+        }
         if (!receiptImage) {
-          return alert("⚠️ إلزامي: يرجى إرفاق صورة/سكرين شوت إيصال التحويل لتأكيد الحجز.");
+          return setErrorMsg("إلزامي: يرجى إرفاق صورة/سكرين شوت إيصال التحويل لتأكيد الحجز.");
         }
         setUploading(true);
         const finalBooking = {
           ...pendingBooking,
           paymentMethod: selectedWallet,
+          senderPhone: senderPhone.trim(),
           receiptImage: receiptImage,
           status: 'awaiting_admin_approval',
           createdAt: new Date().toISOString()
         };
 
-        db.collection('bookings').doc(pendingBooking.id).set(finalBooking)
-          .then(() => {
-            setBookings([finalBooking, ...bookings]);
-            setPaid(true);
-            setUploading(false);
-          })
-          .catch(err => {
-            console.error(err);
-            setBookings([finalBooking, ...bookings]);
-            setPaid(true);
-            setUploading(false);
-          });
+        db.collection('bookings').doc(pendingBooking.id).set(finalBooking).then(() => {
+          setBookings([finalBooking, ...bookings]);
+          setPaid(true);
+          setUploading(false);
+        }).catch(err => {
+          setBookings([finalBooking, ...bookings]);
+          setPaid(true);
+          setUploading(false);
+        });
       };
 
       return (
         <div className="max-w-md mx-auto py-8 px-4 space-y-6">
           <div className="text-center space-y-1">
-            <span className="text-[10px] bg-amber-500/20 text-amber-300 px-3 py-1 rounded-full font-bold">بوابة الدفع الإلكتروني المعتمدة</span>
-            <h1 className="text-2xl font-black text-white">التحويل والتأكيد</h1>
+            <span className="text-[10px] bg-amber-500/20 text-amber-300 px-3 py-1 rounded-full font-bold">بوابة الدفع والتأكيد الرسمية</span>
+            <h1 className="text-2xl font-black text-white">إتمام الحجز والدفع</h1>
           </div>
 
           {!paid ? (
-            <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-3xl space-y-4 text-xs">
+            <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-3xl space-y-4 text-xs shadow-xl">
               <div className="flex justify-between border-b border-neutral-800 pb-2">
                 <span>الرقم المرجعي للحجز:</span>
                 <strong className="text-amber-400 font-mono text-sm">{pendingBooking.ref}</strong>
               </div>
               <div className="flex justify-between border-b border-neutral-800 pb-2">
-                <span>المبلغ الإجمالي المطلوب:</span>
+                <span>المبلغ المطلوب سداده:</span>
                 <strong className="text-white text-base">{pendingBooking.totalCost} ج.م</strong>
               </div>
 
-              <div className="space-y-2 pt-1">
-                <span className="text-neutral-300 font-bold block">1. اختر محفظتك للتحويل:</span>
+              {canPayWithWallet && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/40 rounded-2xl space-y-2">
+                  <div className="flex justify-between items-center text-emerald-300 font-bold">
+                    <span>رصيدك في TWIX: {currentCustomer.walletBalance} ج</span>
+                    <span>✓ يكفي للدفع الفوري</span>
+                  </div>
+                  <button type="button" disabled={uploading} onClick={handleWalletPayment} className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-xl text-xs shadow-lg transition-all">
+                    ⚡ دفع فوري بخصم من رصيد محفظتي ({pendingBooking.totalCost} ج)
+                  </button>
+                </div>
+              )}
+
+              {canPayWithWallet && <div className="text-center text-[11px] text-neutral-500 font-bold">— أو الدفع عبر محافظ الكاش —</div>}
+
+              <div className="space-y-2">
+                <span className="text-neutral-300 font-bold block">1. اختر محفظة التحويل:</span>
                 <div className="grid grid-cols-2 gap-2">
                   {[
                     { id: 'vodafone', name: 'فودافون كاش', color: 'border-rose-500/50 text-rose-400' },
@@ -776,55 +924,38 @@
                     { id: 'etisalat', name: 'اتصالات كاش', color: 'border-emerald-500/50 text-emerald-400' },
                     { id: 'wepay', name: 'وي باي (WE)', color: 'border-purple-500/50 text-purple-400' }
                   ].map(w => (
-                    <button
-                      key={w.id}
-                      type="button"
-                      onClick={() => setSelectedWallet(w.id)}
-                      className={`p-2.5 rounded-xl border font-bold text-center transition-all ${selectedWallet === w.id ? 'bg-amber-500 text-black border-amber-500 shadow-md' : `bg-neutral-950 ${w.color}`}`}
-                    >
+                    <button key={w.id} type="button" onClick={() => setSelectedWallet(w.id)} className={`p-2.5 rounded-xl border font-bold text-center transition-all ${selectedWallet === w.id ? 'bg-amber-500 text-black border-amber-500 shadow-md' : `bg-neutral-950 ${w.color}`}`}>
                       {w.name}
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div className="bg-neutral-950 p-4 rounded-2xl border border-neutral-800 space-y-2 text-center">
-                <span className="text-[11px] text-neutral-400 block">2. حوّل المبلغ ({pendingBooking.totalCost} ج.م) على هذا الرقم:</span>
+              <div className="bg-neutral-950 p-3.5 rounded-2xl border border-neutral-800 space-y-1.5 text-center">
+                <span className="text-[11px] text-neutral-400 block">2. حوّل المبلغ ({pendingBooking.totalCost} ج) لرقم المحفظة الرسمي:</span>
                 <div className="flex items-center justify-center gap-2">
                   <span className="font-mono text-lg font-black text-amber-400 tracking-wider">01289333316</span>
-                  <button
-                    type="button"
-                    onClick={handleCopyNumber}
-                    className="px-3 py-1 bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg text-[11px] font-bold border border-neutral-700"
-                  >
-                    {copied ? '✓ تم النسخ!' : '📋 نسخ الرقم'}
+                  <button type="button" onClick={handleCopyNumber} className="px-2.5 py-1 bg-neutral-800 hover:bg-neutral-700 text-white rounded-lg text-[11px] font-bold border border-neutral-700">
+                    {copied ? '✓ تم النسخ' : '📋 نسخ الرقم'}
                   </button>
                 </div>
               </div>
 
-              <div className="space-y-2 pt-1">
-                <span className="text-neutral-300 font-bold block">3. إرفاق صورة التحويل (إجباري) 📸:</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="w-full text-xs text-neutral-400 file:mr-2 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-neutral-800 file:text-amber-400 hover:file:bg-neutral-700 cursor-pointer bg-neutral-950 p-2 rounded-xl border border-neutral-800"
-                />
-                {receiptImage && (
-                  <div className="mt-2 text-center space-y-1">
-                    <span className="text-[10px] text-emerald-400 block font-bold">✓ تم إرفاق الصورة للمعاينة:</span>
-                    <img src={receiptImage} alt="Receipt Preview" className="max-h-36 mx-auto rounded-xl border border-emerald-500/40 object-contain shadow-md" />
-                  </div>
-                )}
+              <div className="space-y-1.5">
+                <span className="text-neutral-300 font-bold block">3. رقم محفظتك التي قمت بالتحويل منها *:</span>
+                <input required type="tel" value={senderPhone} onChange={e => setSenderPhone(e.target.value)} placeholder="رقم المحفظة (010, 011, 012, 015)" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-xs text-white text-left font-mono" />
               </div>
 
-              <button
-                type="button"
-                disabled={uploading || !receiptImage}
-                onClick={handleSubmitPayment}
-                className={`w-full py-3.5 font-black rounded-xl text-xs shadow-lg transition-all ${receiptImage ? 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20' : 'bg-neutral-800 text-neutral-500 cursor-not-allowed'}`}
-              >
-                {uploading ? 'جاري إرسال الحجز...' : (receiptImage ? `إرسال الحجز والإيصال (${pendingBooking.totalCost} ج.م)` : 'يرجى إرفاق صورة التحويل أولاً ⚠️')}
+              <div className="space-y-1.5">
+                <span className="text-neutral-300 font-bold block">4. إرفاق صورة/سكرين شوت التحويل (إجباري) 📸:</span>
+                <input type="file" accept="image/*" onChange={handleImageUpload} className="w-full text-xs text-neutral-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-neutral-800 file:text-amber-400 cursor-pointer bg-neutral-950 p-1.5 rounded-xl border border-neutral-800" />
+                {receiptImage && <img src={receiptImage} alt="Receipt" className="max-h-28 mx-auto rounded-xl border border-emerald-500/40 object-contain shadow-md mt-1" />}
+              </div>
+
+              {errorMsg && <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs rounded-xl text-center">⚠️ {errorMsg}</div>}
+
+              <button type="button" disabled={uploading} onClick={handleSubmitPayment} className="w-full py-3.5 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-xl text-xs shadow-lg shadow-emerald-500/20 transition-all">
+                {uploading ? 'جاري إرسال الحجز...' : `تأكيد وإرسال الحجز (${pendingBooking.totalCost} ج.م)`}
               </button>
             </div>
           ) : (
@@ -833,17 +964,281 @@
               <h2 className="text-xl font-black text-white">تم إرسال حجزك بنجاح!</h2>
               <p className="text-xs text-neutral-300 leading-relaxed">
                 رقم الحجز: <strong className="text-amber-400 font-mono">{pendingBooking.ref}</strong><br />
-                تم استلام إيصال التحويل وهو الآن قيد المراجعة الفورية من الإدارة وسيتم تأكيده فوراً.
+                تم استلام بيانات التحويل وسيتم تأكيد الحجز فوراً من الإدارة.
               </p>
-              <div className="p-3 bg-neutral-950 border border-amber-500/30 rounded-2xl text-[11px] text-amber-200">
-                ⚠️ لو واجهتك أي مشكلة، تواصل مع الإدارة عبر الواتساب من صفحة "حسابي" مع إرفاق رقم طلبك.
-              </div>
-              <div className="flex gap-2 pt-2">
-                <button onClick={() => navigate('account')} className="flex-1 py-2.5 bg-neutral-800 hover:bg-neutral-700 text-white font-bold rounded-xl text-xs border border-neutral-700">عرض في حسابي</button>
-                <button onClick={() => navigate('home')} className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-xl text-xs">الرئيسية</button>
+              <a href={SITE_CONFIG.mapsUrl} target="_blank" className="w-full py-2.5 bg-neutral-800 hover:bg-neutral-700 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-black flex items-center justify-center gap-2">
+                📍 فتح موقع الصالة على Google Maps (GPS)
+              </a>
+              <div className="flex gap-2 pt-1">
+                <button onClick={() => navigate('account')} className="flex-1 py-2.5 bg-neutral-800 text-white font-bold rounded-xl text-xs">عرض في حسابي</button>
+                <button onClick={() => navigate('home')} className="flex-1 py-2.5 bg-amber-500 text-black font-black rounded-xl text-xs">الرئيسية</button>
               </div>
             </div>
           )}
+        </div>
+      );
+              }
+    function WalletTopupModal({ showTopupModal, setShowTopupModal, currentCustomer }) {
+      if (!showTopupModal || !currentCustomer) return null;
+      const [amount, setAmount] = useState(100);
+      const [wallet, setWallet] = useState('vodafone');
+      const [phone, setPhone] = useState('');
+      const [receipt, setReceipt] = useState(null);
+      const [copied, setCopied] = useState(false);
+      const [loading, setLoading] = useState(false);
+      const [msg, setMsg] = useState('');
+
+      const handleUpload = async (e) => {
+        if (!e.target.files[0]) return;
+        const comp = await compressImage(e.target.files[0]);
+        setReceipt(comp);
+      };
+
+      const handleSendTopup = () => {
+        if (!validateEgyptianPhone(phone)) return setMsg("يرجى كتابة رقم محفظة مصري صحيح (010, 011, 012, 015).");
+        if (!receipt) return setMsg("إلزامي: يرجى إرفاق سكرين شوت إيصال التحويل.");
+        setLoading(true);
+
+        const reqData = {
+          id: `top-${Date.now()}`,
+          customerName: currentCustomer.name,
+          customerEmail: currentCustomer.email,
+          amount: Number(amount),
+          wallet,
+          senderPhone: phone.trim(),
+          receiptImage: receipt,
+          status: 'pending',
+          createdAt: new Date().toISOString()
+        };
+
+        db.collection('wallet_requests').doc(reqData.id).set(reqData).then(() => {
+          alert("تم إرسال طلب شحن الرصيد للإدارة بنجاح! سيتم مراجعة الإيصال وإيداع المبلغ في محفظتك فوراً.");
+          setLoading(false);
+          setShowTopupModal(false);
+        }).catch(() => {
+          alert("حدث خطأ أثناء الإرسال، تأكد من اتصالك بالإنترنت.");
+          setLoading(false);
+        });
+      };
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-3.5 shadow-2xl text-xs max-h-[90vh] overflow-y-auto no-scrollbar">
+            <div className="flex justify-between items-center border-b border-neutral-800 pb-2">
+              <h3 className="font-bold text-white text-sm">➕ طلب شحن رصيد في محفظة TWIX</h3>
+              <button onClick={() => setShowTopupModal(false)} className="text-neutral-400 hover:text-white font-bold">✕</button>
+            </div>
+            <div>
+              <label className="text-[11px] text-neutral-400 block mb-1">المبلغ المطلوب شحنه (ج.م):</label>
+              <div className="grid grid-cols-4 gap-1.5 mb-2">
+                {[50, 100, 200, 500].map(amt => (
+                  <button key={amt} type="button" onClick={() => setAmount(amt)} className={`py-1.5 rounded-lg font-bold ${amount === amt ? 'bg-amber-500 text-black' : 'bg-neutral-950 text-neutral-300 border border-neutral-800'}`}>{amt}ج</button>
+                ))}
+              </div>
+              <input type="number" min={20} value={amount} onChange={e => setAmount(Number(e.target.value))} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white font-bold text-center" />
+            </div>
+            <div>
+              <label className="text-[11px] text-neutral-400 block mb-1">اختر محفظة التحويل:</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {['vodafone:فودافون كاش', 'orange:أورانج كاش', 'etisalat:اتصالات كاش', 'wepay:وي باي'].map(w => {
+                  const [id, label] = w.split(':');
+                  return <button key={id} type="button" onClick={() => setWallet(id)} className={`p-2 rounded-xl font-bold ${wallet === id ? 'bg-amber-500 text-black' : 'bg-neutral-950 text-neutral-300 border border-neutral-800'}`}>{label}</button>;
+                })}
+              </div>
+            </div>
+            <div className="bg-neutral-950 p-2.5 rounded-xl border border-neutral-800 text-center space-y-1">
+              <span className="text-[10px] text-neutral-400 block">حوّل ({amount} ج) للرقم الرسمي:</span>
+              <div className="flex items-center justify-center gap-2">
+                <span className="font-mono text-sm font-black text-amber-400">01289333316</span>
+                <button type="button" onClick={() => { navigator.clipboard.writeText("01289333316"); setCopied(true); setTimeout(() => setCopied(false), 2000); }} className="px-2 py-0.5 bg-neutral-800 text-white rounded text-[10px]">{copied ? '✓ تم' : 'نسخ'}</button>
+              </div>
+            </div>
+            <input required type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="رقم محفظتك المحول منها (010, 011..)" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white font-mono text-left" />
+            <div>
+              <span className="text-[10px] text-neutral-400 block mb-1">إرفاق سكرين شوت التحويل 📸:</span>
+              <input type="file" accept="image/*" onChange={handleUpload} className="w-full bg-neutral-950 p-1 rounded-xl border border-neutral-800 text-[10px] text-neutral-400 file:bg-neutral-800 file:text-amber-400 file:border-0 file:rounded-lg file:px-2 file:py-1 cursor-pointer" />
+              {receipt && <img src={receipt} className="max-h-20 mx-auto rounded-lg border border-emerald-500/40 mt-1" />}
+            </div>
+            {msg && <div className="text-rose-400 text-[11px] text-center font-bold">⚠️ {msg}</div>}
+            <button type="button" disabled={loading} onClick={handleSendTopup} className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-xl text-xs">{loading ? 'جاري الإرسال...' : 'إرسال طلب الشحن للإدارة'}</button>
+          </div>
+        </div>
+      );
+    }
+
+    function CustomerAccountPage({ currentCustomer, setCurrentCustomer, bookings, googleScoreStats, navigate, handleGoogleLogin, now }) {
+      const [showTopup, setShowTopup] = useState(false);
+      const [emailInput, setEmailInput] = useState('');
+      const [nameInput, setNameInput] = useState('');
+
+      const handleEmailLogin = (e) => {
+        e.preventDefault();
+        if (!emailInput.trim()) return;
+        const cust = { email: emailInput.trim().toLowerCase(), name: nameInput.trim() || emailInput.split('@')[0], avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80', authProvider: 'email', walletBalance: 0, rewards: [] };
+        setCurrentCustomer(cust);
+      };
+
+      const myBookings = bookings.filter(b => currentCustomer && ((b.email && b.email.toLowerCase() === currentCustomer.email.toLowerCase()) || b.customerName === currentCustomer.name));
+
+      if (!currentCustomer) {
+        return (
+          <div className="max-w-md mx-auto py-12 px-4 space-y-6">
+            <div className="text-center space-y-2">
+              <div className="w-14 h-14 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-center mx-auto text-2xl">👤</div>
+              <h1 className="text-2xl font-black text-white">بوابة عملاء TWIX الرسمية</h1>
+              <p className="text-xs text-neutral-400">سجل بحساب Google لتفعيل محفظة TWIX وسكور الساعات المجانية!</p>
+            </div>
+            <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 space-y-4 shadow-xl">
+              <button type="button" onClick={handleGoogleLogin} className="w-full py-3.5 bg-white hover:bg-neutral-100 text-black font-bold rounded-2xl text-xs flex items-center justify-center gap-3 transition-all shadow-lg">
+                <svg className="w-5 h-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/></svg>
+                <span>تسجيل الدخول بحساب Google الموثق</span>
+              </button>
+              <div className="flex items-center gap-3 text-neutral-600 text-xs"><span className="h-px bg-neutral-800 flex-1"></span><span>أو دخول زائر عادي</span><span className="h-px bg-neutral-800 flex-1"></span></div>
+              <form onSubmit={handleEmailLogin} className="space-y-3">
+                <input type="email" required placeholder="name@example.com" value={emailInput} onChange={e => setEmailInput(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-xs text-white" />
+                <input type="text" placeholder="اسمك (اختياري)" value={nameInput} onChange={e => setNameInput(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-xs text-white" />
+                <button type="submit" className="w-full py-2.5 bg-neutral-800 text-neutral-300 font-bold rounded-xl text-xs">دخول زائر</button>
+              </form>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="max-w-4xl mx-auto py-8 px-4 space-y-6">
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+            <div className="flex items-center gap-4 text-center sm:text-right">
+              <img src={currentCustomer.avatar} className="w-14 h-14 rounded-2xl object-cover border border-amber-500/40" />
+              <div>
+                <h2 className="text-lg font-black text-white">{currentCustomer.name}</h2>
+                <span className="text-xs text-neutral-400 block font-mono">{currentCustomer.email}</span>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">✓ حساب موثق بـ Google</span>
+                  <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-amber-500 text-black">💰 رصيدك: {currentCustomer.walletBalance || 0} ج</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => setShowTopup(true)} className="bg-emerald-500 hover:bg-emerald-400 text-black font-black px-3.5 py-2 rounded-xl text-xs shadow-md">➕ شحن محفظتي</button>
+              <button onClick={() => navigate('booking')} className="bg-amber-500 hover:bg-amber-400 text-black font-bold px-3.5 py-2 rounded-xl text-xs">+ حجز جديد</button>
+              <button onClick={() => { setCurrentCustomer(null); localStorage.removeItem('twix_customer'); }} className="bg-neutral-800 hover:bg-neutral-700 text-neutral-400 px-3 py-2 rounded-xl text-xs">خروج</button>
+            </div>
+          </div>
+
+          {/* نظام سكور ساعات جوجل والجوائز */}
+          {googleScoreStats && (
+            <div className="bg-gradient-to-r from-amber-500/20 via-neutral-900 to-amber-500/10 border-2 border-amber-500/40 rounded-3xl p-5 space-y-3 shadow-xl">
+              <div className="flex justify-between items-center text-xs"><span className="text-amber-400 font-black">🎮 سكور ساعات لعب TWIX</span><strong className="text-white font-mono">{googleScoreStats.totalHours} ساعة لعب</strong></div>
+              {googleScoreStats.freeHoursEarned > 0 && <div className="bg-amber-500 text-black px-3 py-1 rounded-full text-xs font-black inline-block animate-bounce">🎁 كسبت {googleScoreStats.freeHoursEarned} ساعة مجانية جاهزة للصرف!</div>}
+              <div className="w-full bg-neutral-950 rounded-full h-3 border border-neutral-800 p-0.5"><div className="bg-amber-500 h-full rounded-full transition-all" style={{ width: `${Math.min(100, (googleScoreStats.progressInTier / 24) * 100)}%` }}></div></div>
+              <p className="text-[11px] text-neutral-400">متبقي لك {googleScoreStats.remainingToReward} ساعة لعب فقط وتفتح ساعتك الهدية القادمة!</p>
+            </div>
+          )}
+
+          <WalletTopupModal showTopupModal={showTopup} setShowTopupModal={setShowTopup} currentCustomer={currentCustomer} />
+          {/* جوائز وكوبونات العميل بالعداد التنازلي 7 أيام */}
+          {currentCustomer.rewards && currentCustomer.rewards.length > 0 && (
+            <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 space-y-3 shadow-xl">
+              <h3 className="font-bold text-white text-xs border-b border-neutral-800 pb-2">🎁 جوائزي وكوبوناتي المحفوظة:</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {currentCustomer.rewards.map((rew, idx) => {
+                  const expiresAt = rew.createdAt + (rew.validDays || 7) * 24 * 60 * 60 * 1000;
+                  const diffMs = expiresAt - now;
+                  const isExpired = diffMs <= 0;
+                  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+                  const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                  const isUrgent = diffMs <= 48 * 60 * 60 * 1000 && !isExpired;
+
+                  return (
+                    <div key={idx} className={`p-3 rounded-2xl border flex justify-between items-center text-xs ${isExpired ? 'bg-neutral-950 border-neutral-800 text-neutral-500' : (isUrgent ? 'bg-rose-500/10 border-rose-500/40 text-rose-300 animate-pulse' : 'bg-neutral-950 border-amber-500/30 text-amber-300')}`}>
+                      <div>
+                        <strong className="block text-white text-xs">{rew.title}</strong>
+                        <span className="text-[10px] text-neutral-400 block">{rew.condition || 'صالحة للاستخدام'}</span>
+                      </div>
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-black font-mono ${isExpired ? 'bg-neutral-800 text-neutral-500' : (isUrgent ? 'bg-rose-600 text-white' : 'bg-amber-500/20 text-amber-400')}`}>
+                        {isExpired ? 'منتهية ✕' : `⏳ باقي ${days}ي و ${hours}س`}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* سجل حجوزات العميل */}
+          <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 space-y-4 shadow-xl">
+            <h3 className="font-bold text-white text-sm border-b border-neutral-800 pb-3">سجل حجوزاتك ({myBookings.length}):</h3>
+            {myBookings.length === 0 ? <p className="text-neutral-500 text-xs py-6 text-center">لا توجد حجوزات مسجلة بعد.</p> : (
+              <div className="space-y-4">{myBookings.map(b => (
+                <div key={b.id} className="p-4 bg-neutral-950 border border-neutral-800 rounded-2xl text-xs space-y-3">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="text-amber-400 font-mono font-bold">{b.ref}</span> — <span className="text-white font-bold">{b.items ? b.items.map(i => `${i.deviceType} (${i.mode === 'multi' ? 'ملتي' : 'فردي'})`).join('+') : 'جلسة'}</span>
+                      {b.snacksSummary && <div className="text-[11px] text-amber-300 mt-0.5">طلبات: {b.snacksSummary}</div>}
+                      <div className="text-[10px] text-neutral-500 mt-0.5">{b.date} - {b.time}</div>
+                    </div>
+                    <div className="text-left">
+                      <span className="text-white font-bold block">{b.totalCost} ج.م</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${b.status === 'confirmed' ? 'bg-emerald-500/20 text-emerald-400' : (b.status === 'rejected' ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-500/20 text-amber-400')}`}>
+                        {b.status === 'confirmed' ? 'مؤكد ✅' : (b.status === 'rejected' ? 'مرفوض ❌' : 'قيد الانتظار ⏳')}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* صندوق المساعدة بالواتساب المربوط برقم الحجز */}
+                  <div className="p-3 bg-neutral-900/90 border border-amber-500/30 rounded-xl space-y-2">
+                    <p className="text-[10px] text-amber-200 leading-relaxed">
+                      ⚠️ <strong className="text-amber-400">تنبيه خدمة العملاء:</strong> لو واجهتك أي مشكلة أو حابب تستفسر عن حجزك، اضغط على زر المساعدة أدناه ليرفق رقم طلبك تلقائياً للإدارة. (لا تستخدم الزر العائم لأنه مخصص للحجز والاستفسار العام فقط).
+                    </p>
+                    <a
+                      href={`https://wa.me/201289333316?text=${encodeURIComponent(
+                        `السلام عليكم يا إدارة TWIX 🎮\nبخصوص الحجز بتاعي:\n📌 رقم الحجز: ${b.ref}\n👤 الاسم: ${b.customerName}\n💰 المبلغ: ${b.totalCost} ج.م\nحابب أستفسر / أعدل بخصوص الحجز ده.`
+                      )}`}
+                      target="_blank"
+                      className="w-full py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-lg text-xs flex items-center justify-center gap-1.5 shadow-md"
+                    >
+                      💬 تواصل للمساعدة بخصوص هذا الطلب ({b.ref})
+                    </a>
+                  </div>
+                </div>
+              ))}</div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    function GamesPage({ games, userHearts, toggleHeart, navigate }) {
+      // ترتيب الألعاب تلقائياً حسب الأكثر قلوباً
+      const sortedGames = [...games].sort((a, b) => (b.hearts || 0) - (a.hearts || 0));
+
+      return (
+        <div className="max-w-7xl mx-auto py-8 px-4 space-y-6">
+          <div className="flex justify-between items-center">
+            <div><h1 className="text-2xl font-black text-white">مكتبة ألعاب TWIX</h1><span className="text-xs text-neutral-400">مرتبة تلقائياً حسب الأكثر تفضيلاً بين اللاعبين</span></div>
+            <span className="text-xs text-amber-400 font-bold">المفضلة: {userHearts.length}/2</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+            {sortedGames.map(game => (
+              <div key={game.id} className="bg-neutral-900 border border-neutral-800 rounded-3xl overflow-hidden flex flex-col justify-between shadow-xl">
+                <div>
+                  <div className="h-44 relative">
+                    <img src={game.image} className="w-full h-full object-cover" />
+                    <button onClick={() => toggleHeart(game.id)} className={`absolute top-3 left-3 p-2 rounded-full text-sm backdrop-blur-md transition-all ${userHearts.includes(game.id) ? 'bg-rose-500 text-white scale-110' : 'bg-black/60 text-white'}`}>❤️</button>
+                    <span className="absolute bottom-2 right-2 bg-black/80 px-2.5 py-1 rounded-full text-[10px] font-bold text-amber-400 font-mono">{game.hearts || 0} إعجاب حقيقي</span>
+                  </div>
+                  <div className="p-4 space-y-1">
+                    <span className="text-[10px] text-amber-400 font-bold">{game.category}</span>
+                    <h3 className="font-bold text-white text-base">{game.title}</h3>
+                    <p className="text-xs text-neutral-400 line-clamp-2">{game.desc}</p>
+                  </div>
+                </div>
+                <div className="p-4 pt-0">
+                  <button onClick={() => navigate('booking')} className="w-full py-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded-xl text-xs font-bold">احجز لتجربة اللعبة</button>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       );
     }
@@ -851,62 +1246,98 @@
     function PricingPage({ navigate }) {
       return (
         <div className="max-w-3xl mx-auto py-8 px-4 space-y-6">
-          <h1 className="text-2xl font-black text-white text-center">الأسعار وقائمة المشروبات</h1>
-          <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-3xl space-y-4 text-xs">
-            <h2 className="font-bold text-white text-sm border-b border-neutral-800 pb-2">جدول أسعار أجهزة اللعب:</h2>
-            <div className="flex justify-between py-1"><span>PS4 فردي (مع صديق - ذراعين):</span><strong>30 ج / 30د (60 ج / ساعة)</strong></div>
-            <div className="flex justify-between py-1"><span>PS4 ملتي (4 ذراعات):</span><strong>40 ج / 30د (80 ج / ساعة)</strong></div>
-            <div className="flex justify-between py-1"><span>PS5 VIP فردي (مع صديق - ذراعين):</span><strong>40 ج / 30د (80 ج / ساعة)</strong></div>
-            <div className="flex justify-between py-1"><span>PS5 VIP ملتي (4 ذراعات):</span><strong>50 ج / 30د (100 ج / ساعة)</strong></div>
-            <h2 className="font-bold text-white text-sm border-b border-neutral-800 pb-2 pt-4">قائمة الكافتيريا:</h2>
-            <div className="flex justify-between py-1"><span>🍜 إندومي بجميع النكهات:</span><strong>20 ج.م</strong></div>
-            <div className="flex justify-between py-1"><span>☕ شاي (أحمر / أخضر / نعناع):</span><strong>25 ج.م</strong></div>
-            <div className="flex justify-between py-1"><span>☕ قهوة تركي / إسبريسو:</span><strong>50 ج.م</strong></div>
+          <h1 className="text-2xl font-black text-white text-center">الأسعار وقائمة المشروبات المعتمدة</h1>
+          <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-3xl space-y-4 text-xs shadow-xl">
+            <h2 className="font-bold text-amber-400 text-sm border-b border-neutral-800 pb-2">جدول أسعار أجهزة اللعب:</h2>
+            <div className="flex justify-between py-1"><span>PS4 Pro فردي (مع صديق - ذراعين):</span><strong>35 ج / 30د (70 ج / ساعة)</strong></div>
+            <div className="flex justify-between py-1"><span>PS4 Pro ملتي (4 ذراعات - شلة):</span><strong>45 ج / 30د (90 ج / ساعة)</strong></div>
+            <div className="flex justify-between py-1"><span>PS5 VIP فردي (مع صديق - ذراعين):</span><strong>50 ج / 30د (100 ج / ساعة)</strong></div>
+            <div className="flex justify-between py-1"><span>PS5 VIP ملتي (4 ذراعات - شلة):</span><strong>60 ج / 30د (120 ج / ساعة)</strong></div>
+            
+            <h2 className="font-bold text-amber-400 text-sm border-b border-neutral-800 pb-2 pt-4">قائمة الكافتيريا والسناكس:</h2>
+            <div className="flex justify-between py-1"><span>🥩 إندومي باللحمة:</span><strong>25 ج.م</strong></div>
+            <div className="flex justify-between py-1"><span>🍗 إندومي بالفراخ:</span><strong>25 ج.م</strong></div>
+            <div className="flex justify-between py-1"><span>🥦 إندومي بالخضار:</span><strong>25 ج.م</strong></div>
+            <div className="flex justify-between py-1"><span>🥔 كيس شيبسي وسط (أبو 10 ج):</span><strong>15 ج.م</strong></div>
+            <div className="flex justify-between py-1"><span>🥔 كيس شيبسي كبير (أبو 15 ج):</span><strong>25 ج.م</strong></div>
+            <div className="flex justify-between py-1"><span>☕ شاي بجميع أنواعه:</span><strong>20 ج.م</strong></div>
+            <div className="flex justify-between py-1"><span>☕ قهوة تركي بالمياه:</span><strong>35 ج.م</strong></div>
+            <div className="flex justify-between py-1"><span>☕ نسكافيه / قهوة بالحليب:</span><strong>50 ج.م</strong></div>
+            <div className="flex justify-between py-1"><span>🥤 كانزات مياه غازية:</span><strong>25 ج.م</strong></div>
+            <div className="flex justify-between py-1"><span>💧 مياه معدنية مثلجة:</span><strong>10 ج.م</strong></div>
           </div>
         </div>
       );
     }
+    function ReviewsPage({ reviews, setReviews, currentCustomer }) {
+      const [author, setAuthor] = useState(currentCustomer ? currentCustomer.name : '');
+      const [rating, setRating] = useState(5);
+      const [comment, setComment] = useState('');
+      const [submitting, setSubmitting] = useState(false);
 
-    function ReviewsPage({ reviews, setReviews }) {
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!comment.trim()) return;
+        setSubmitting(true);
+        const newRev = {
+          id: `rev-${Date.now()}`,
+          author: author.trim() || 'لاعب TWIX',
+          rating: Number(rating),
+          comment: comment.trim(),
+          date: new Date().toISOString().slice(0, 10),
+          createdAt: Date.now()
+        };
+
+        db.collection('reviews').doc(newRev.id).set(newRev).then(() => {
+          setReviews([newRev, ...reviews]);
+          setComment('');
+          setSubmitting(false);
+          alert("شكراً لك! تم نشر تقييمك الحقيقي وسيظهر لجميع زوار TWIX.");
+        }).catch(() => {
+          setReviews([newRev, ...reviews]);
+          setComment('');
+          setSubmitting(false);
+        });
+      };
+
       return (
         <div className="max-w-2xl mx-auto py-8 px-4 space-y-6">
-          <h1 className="text-2xl font-black text-white text-center">تقييمات اللاعبين</h1>
-          <form onSubmit={(e) => {
-            e.preventDefault(); 
-            const a = e.target.author.value.trim() || 'لاعب مجهول'; 
-            const c = e.target.comment.value.trim(); 
-            const r = Number(e.target.rating.value);
-            setReviews([{ id: `rev-${Date.now()}`, author: a, rating: r, comment: c, date: new Date().toISOString().slice(0, 10) }, ...reviews]); 
-            e.target.reset();
-          }} className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3">
+          <div className="text-center space-y-1">
+            <h1 className="text-2xl font-black text-white">تقييمات وآراء اللاعبين الحقيقية</h1>
+            <p className="text-xs text-neutral-400">شاركنا رأيك في تجربة أجهزة PS5 VIP والأجواء والضيافة في TWIX</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3 shadow-xl">
             <div className="grid grid-cols-2 gap-2">
-              <input name="author" placeholder="اسمك (اختياري)" className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-xs text-white" />
-              <select name="rating" className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-xs text-white">
-                <option value={5}>⭐⭐⭐⭐⭐ (5 نجوم)</option>
-                <option value={4}>⭐⭐⭐⭐ (4 نجوم)</option>
-                <option value={3}>⭐⭐⭐ (3 نجوم)</option>
+              <input value={author} onChange={e => setAuthor(e.target.value)} placeholder="اسمك (أو لقب الجيمنج)" className="bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-xs text-white" />
+              <select value={rating} onChange={e => setRating(Number(e.target.value))} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-xs text-amber-400 font-bold">
+                <option value={5}>⭐⭐⭐⭐⭐ (5 نجوم - ممتاز)</option>
+                <option value={4}>⭐⭐⭐⭐ (4 نجوم - جيد جداً)</option>
+                <option value={3}>⭐⭐⭐ (3 نجوم - جيد)</option>
               </select>
             </div>
-            <textarea required name="comment" placeholder="رأيك في الأجهزة والأجواء والمشاريب..." className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-xs text-white" rows={2}></textarea>
-            <button type="submit" className="w-full py-2.5 bg-amber-500 text-black font-bold rounded-xl text-xs">نشر التقييم</button>
+            <textarea required value={comment} onChange={e => setComment(e.target.value)} placeholder="اكتب رأيك بصراحة عن الأجهزة والتكييف والخدمة..." className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-xs text-white" rows={2}></textarea>
+            <button type="submit" disabled={submitting} className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-xl text-xs shadow-md">
+              {submitting ? 'جاري النشر...' : 'نشر التقييم الآن 🌟'}
+            </button>
           </form>
-          <div className="space-y-3">{reviews.map(r => (
-            <div key={r.id} className="p-4 bg-neutral-900 border border-neutral-800 rounded-2xl text-xs space-y-1">
-              <div className="flex justify-between items-center"><strong className="text-white">{r.author}</strong><span className="text-amber-400">{'⭐'.repeat(r.rating)}</span></div>
-              <p className="text-neutral-300">{r.comment}</p>
-              <span className="text-[10px] text-neutral-500 block">{r.date}</span>
-            </div>
-          ))}</div>
-        </div>
-      );
-    }
 
-    function AboutPage({ navigate }) {
-      return (
-        <div className="max-w-2xl mx-auto py-8 px-4 text-center space-y-4">
-          <h1 className="text-2xl font-black text-white">عن TWIX Gaming Lounge</h1>
-          <p className="text-neutral-300 text-xs leading-relaxed">TWIX هي صالة الألعاب الفاخرة الأولى لعشاق التحدي في مصر، نوفر شاشات 120Hz سريعة، أجهزة PS5 VIP أصلية، ومشروبات وكافتيريا متكاملة مع نظام تحكم إلكتروني متكامل.</p>
-          <button onClick={() => navigate('booking')} className="bg-amber-500 text-black font-bold px-6 py-2.5 rounded-xl text-xs">احجز معنا الآن</button>
+          <div className="space-y-3">
+            {reviews.length === 0 ? (
+              <p className="text-neutral-500 text-xs text-center py-6">كن أول من يشاركنا برأيه وتقييمه لصالة TWIX!</p>
+            ) : (
+              reviews.map(r => (
+                <div key={r.id} className="p-4 bg-neutral-900 border border-neutral-800 rounded-2xl text-xs space-y-1 shadow-md">
+                  <div className="flex justify-between items-center">
+                    <strong className="text-white text-xs">{r.author}</strong>
+                    <span className="text-amber-400">{'⭐'.repeat(r.rating || 5)}</span>
+                  </div>
+                  <p className="text-neutral-300 leading-relaxed">{r.comment}</p>
+                  <span className="text-[10px] text-neutral-500 block font-mono">{r.date}</span>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       );
     }
@@ -914,17 +1345,28 @@
     function ContactPage() {
       return (
         <div className="max-w-md mx-auto py-8 px-4 text-center space-y-4">
-          <h1 className="text-2xl font-black text-white">تواصل معنا</h1>
-          <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-3xl space-y-3 text-xs">
-            <p className="text-white">رقم الهاتف والواتساب: <strong>{SITE_CONFIG.phone}</strong></p>
-            <a href={SITE_CONFIG.social.whatsapp} target="_blank" className="block py-2 bg-emerald-500 text-black font-bold rounded-xl">واتساب المباشر</a>
-            <a href={SITE_CONFIG.social.instagram} target="_blank" className="block py-2 bg-neutral-800 text-white rounded-xl">Instagram</a>
-            <a href={SITE_CONFIG.social.tiktok} target="_blank" className="block py-2 bg-neutral-800 text-white rounded-xl">TikTok</a>
-            <a href={SITE_CONFIG.social.facebook} target="_blank" className="block py-2 bg-neutral-800 text-white rounded-xl">Facebook</a>
+          <div className="space-y-1">
+            <h1 className="text-2xl font-black text-white">تواصل معنا وموقع الصالة</h1>
+            <p className="text-xs text-neutral-400">نحن بانتظارك في TWIX Gaming Lounge لتعيش تجربة الجيمنج الفاخرة</p>
+          </div>
+          <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-3xl space-y-3.5 text-xs shadow-xl">
+            <p className="text-white">رقم الهاتف والحجز المباشر: <strong className="font-mono text-amber-400 text-sm block mt-0.5">{SITE_CONFIG.phone}</strong></p>
+            <a href={SITE_CONFIG.mapsUrl} target="_blank" className="block py-3 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-xl shadow-lg shadow-amber-500/20">
+              📍 فتح موقع الصالة على Google Maps (GPS)
+            </a>
+            <a href={SITE_CONFIG.social.whatsapp} target="_blank" className="block py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-xl">
+              💬 واتساب الإدارة المباشر
+            </a>
+            <div className="grid grid-cols-3 gap-2 pt-1">
+              <a href={SITE_CONFIG.social.instagram} target="_blank" className="py-2 bg-neutral-950 text-neutral-300 border border-neutral-800 rounded-xl hover:text-pink-400">Instagram</a>
+              <a href={SITE_CONFIG.social.tiktok} target="_blank" className="py-2 bg-neutral-950 text-neutral-300 border border-neutral-800 rounded-xl hover:text-cyan-400">TikTok</a>
+              <a href={SITE_CONFIG.social.facebook} target="_blank" className="py-2 bg-neutral-950 text-neutral-300 border border-neutral-800 rounded-xl hover:text-blue-400">Facebook</a>
+            </div>
           </div>
         </div>
       );
-                      }
+    }
+
     const DEFAULT_HASH = "MTQ3MA==";
     function verifyPass(input) {
       const savedHash = localStorage.getItem('twix_admin_pin_hash') || DEFAULT_HASH;
@@ -935,7 +1377,7 @@
       }
     }
 
-    function AdminPage({ devices, setDevices, bookings, setBookings, sessions, setSessions, completedSales, setCompletedSales, expenses, setExpenses, now }) {
+    function AdminPage({ devices, setDevices, bookings, setBookings, sessions, setSessions, completedSales, setCompletedSales, expenses, setExpenses, reviews, setReviews, now }) {
       const [authed, setAuthed] = useState(() => sessionStorage.getItem('twix_admin_auth') === 'true');
       const [pin, setPin] = useState('');
       const [error, setError] = useState(false);
@@ -947,21 +1389,33 @@
       const [viewReceiptImg, setViewReceiptImg] = useState(null);
       const [editingBooking, setEditingBooking] = useState(null);
 
+      const [topupRequests, setTopupRequests] = useState([]);
+      const [viewTopupReceipt, setViewTopupReceipt] = useState(null);
+
       const [walkInDevice, setWalkInDevice] = useState('');
       const [walkInCustomerName, setWalkInCustomerName] = useState('زبون صالة');
       const [walkInMode, setWalkInMode] = useState('single');
       const [walkInTimerType, setWalkInTimerType] = useState('open');
-      const [walkInTargetMins, setWalkInTargetMins] = useState(60);
+      const [walkInTargetMins, setWalkInTargetMins] = useState(30);
 
       const [transferSessionTarget, setTransferSessionTarget] = useState(null);
+
+      useEffect(() => {
+        const unsub = db.collection('wallet_requests').where('status', '==', 'pending').onSnapshot(snap => {
+          const list = [];
+          snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+          setTopupRequests(list);
+        }, () => {});
+        return () => unsub();
+      }, []);
 
       if (!authed) {
         return (
           <div className="max-w-sm mx-auto py-16 px-4 space-y-5">
             <div className="w-12 h-12 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-center mx-auto text-amber-400 text-xl font-black">🔒</div>
-            <h1 className="text-xl font-black text-white text-center">لوحة تحكم الإدارة</h1>
-            <p className="text-xs text-neutral-400 text-center">منطقة مخصصة للإدارة ومسؤولي الصالة فقط</p>
-            {error && <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs text-center rounded-xl font-bold">الرمز السري غير صحيح، يرجى المحاولة مرة أخرى.</div>}
+            <h1 className="text-xl font-black text-white text-center">لوحة تحكم الإدارة السرية</h1>
+            <p className="text-xs text-neutral-400 text-center">منطقة مخصصة لإدارة الصالة ومتابعة الشيفت والدرج</p>
+            {error && <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs text-center rounded-xl font-bold">الرمز السري غير صحيح، حاول مرة أخرى.</div>}
             <form onSubmit={(e) => { 
               e.preventDefault(); 
               if (verifyPass(pin)) { 
@@ -979,7 +1433,6 @@
           </div>
         );
       }
-
       const todayStr = new Date().toISOString().slice(0, 10);
       const totalScreens = devices.length;
       const occupiedScreens = devices.filter(d => d.status === 'busy').length;
@@ -998,7 +1451,7 @@
         const newPin = prompt("أدخل الرمز السري الجديد للإدارة (أرقام فقط):");
         if (newPin && newPin.trim().length >= 4) {
           localStorage.setItem('twix_admin_pin_hash', btoa(newPin.trim()));
-          alert("تم تغيير الرمز السري بنجاح وتحديث نظام الأمان!");
+          alert("تم تغيير الرمز السري وتحديث أمان الصالة بنجاح!");
         } else if (newPin) {
           alert("الرمز يجب ألا يقل عن 4 أرقام.");
         }
@@ -1007,7 +1460,7 @@
       const handleStartWalkIn = (e) => {
         e.preventDefault();
         const dev = devices.find(d => d.id === walkInDevice);
-        if (!dev) return alert("اختر جهازاً متاحاً!");
+        if (!dev) return alert("اختر جهازاً متاحاً للتشغيل!");
 
         const newSession = {
           id: `ses-${Date.now()}`,
@@ -1017,9 +1470,9 @@
           customerName: walkInCustomerName || 'زبون صالة',
           mode: walkInMode,
           timerType: walkInTimerType,
-          targetMins: Number(walkInTargetMins) || 60,
+          targetMins: Number(walkInTargetMins) || 30,
           startTime: new Date().toISOString(),
-          snacks: { indomie: 0, tea: 0, coffee: 0 },
+          snacks: {},
           snacksCost: 0,
           source: 'in_store'
         };
@@ -1047,7 +1500,7 @@
 
       const executeTransfer = (fromSession, toDeviceId) => {
         const toDev = devices.find(d => d.id === toDeviceId);
-        if (!toDev || toDev.status !== 'available') return alert("الجهاز الجديد غير متاح!");
+        if (!toDev || toDev.status !== 'available') return alert("الجهاز المختار غير متاح!");
 
         setDevices(devices.map(d => {
           if (d.id === fromSession.deviceId) return { ...d, status: 'available' };
@@ -1065,6 +1518,7 @@
         setTransferSessionTarget(null);
       };
 
+      // إنهاء الجلسة العادي
       const endSession = (s, discountRewardHours = 0) => {
         const sec = Math.max(0, Math.floor((now - new Date(s.startTime).getTime()) / 1000));
         const minsBilled = Math.max(1, Math.ceil(sec / 60));
@@ -1099,66 +1553,123 @@
         setReceiptData(saleRecord);
       };
 
+      // ⚡ الإنهاء الطارئ بالدقيقة الفعلية مع حساب استرداد الفارق
+      const emergencyEndSession = (s) => {
+        const sec = Math.max(0, Math.floor((now - new Date(s.startTime).getTime()) / 1000));
+        const minsBilled = Math.max(1, Math.ceil(sec / 60));
+        const hourRate = (PRICING[s.devType] || PRICING.PS4)[s.mode === 'multi' ? 'multi' : 'single'].ratePerHour;
+        const timeCost = Math.ceil(minsBilled * (hourRate / 60));
+        const snacksCost = s.snacksCost || 0;
+        const actualCost = timeCost + snacksCost;
+
+        const saleRecord = {
+          id: `sale-emg-${Date.now()}`,
+          devName: s.devName,
+          devType: s.devType,
+          customerName: s.customerName,
+          mode: s.mode,
+          durationMins: minsBilled,
+          timeCost,
+          snacks: s.snacks,
+          snacksCost,
+          totalCost: actualCost,
+          isEmergency: true,
+          source: 'in_store',
+          date: todayStr
+        };
+
+        setCompletedSales([saleRecord, ...completedSales]);
+        setSessions(sessions.filter(x => x.id !== s.id));
+        setDevices(devices.map(d => d.id === s.deviceId ? { ...d, status: 'available' } : d));
+        setReceiptData(saleRecord);
+      };
+
       const updateBookingStatus = (bId, newStatus) => {
         setBookings(bookings.map(x => x.id === bId ? { ...x, status: newStatus } : x));
         db.collection('bookings').doc(bId).update({ status: newStatus }).catch(console.error);
       };
+
+      // الموافقة الفورية على شحن محفظة العميل وإيداع الرصيد سحابياً
+      const handleApproveTopup = (req) => {
+        db.collection('customers').doc(req.customerEmail).update({
+          walletBalance: firebase.firestore.FieldValue.increment(req.amount)
+        }).then(() => {
+          db.collection('wallet_requests').doc(req.id).update({ status: 'approved' });
+          alert(`تم تأكيد استلام التحويل وإيداع ${req.amount} ج.م في محفظة العميل (${req.customerName}) بنجاح!`);
+        });
+      };
+
+      const handleRejectTopup = (req) => {
+        if (!confirm("هل أنت متأكد من رفض طلب الشحن هذا؟")) return;
+        db.collection('wallet_requests').doc(req.id).update({ status: 'rejected' });
+      };
+
+      // حذف أي تقييم سيء من الفايربيس
+      const deleteReview = (revId) => {
+        if (!confirm("هل تريد حذف هذا التقييم نهائياً من الموقع؟")) return;
+        db.collection('reviews').doc(revId).delete().then(() => {
+          setReviews(reviews.filter(r => r.id !== revId));
+        });
+      };
       return (
         <div className="max-w-6xl mx-auto py-6 px-4 space-y-6 text-xs">
-          <div className="flex flex-wrap justify-between items-center bg-neutral-900 p-4 rounded-3xl border border-neutral-800 gap-3">
+          {/* شريط الإدارة وأزرار العمليات السريعة */}
+          <div className="flex flex-wrap justify-between items-center bg-neutral-900 p-4 rounded-3xl border border-neutral-800 gap-3 shadow-xl">
             <div>
-              <h2 className="font-black text-white text-base">لوحة تحكم وإدارة TWIX</h2>
-              <span className="text-[10px] text-emerald-400 font-bold">الشيفت الحالي: مفتوح ونشط</span>
+              <h2 className="font-black text-white text-base">لوحة تحكم وإدارة TWIX المركزية</h2>
+              <span className="text-[10px] text-emerald-400 font-bold">الوردية الحالية: نشطة والدرج متزامن سحابياً 🟢</span>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => setShowWalkInModal(true)} className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3 py-2 rounded-xl">+ زبون صالة مباشر (Walk-in)</button>
-              <button onClick={() => setShowQuickPOS(true)} className="bg-neutral-800 hover:bg-neutral-700 text-amber-300 font-bold px-3 py-2 rounded-xl border border-amber-500/30">☕ كافتيريا بدون جهاز</button>
+              <button onClick={() => setShowWalkInModal(true)} className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3 py-2 rounded-xl">+ زبون صالة (Walk-in)</button>
+              <button onClick={() => setShowQuickPOS(true)} className="bg-neutral-800 hover:bg-neutral-700 text-amber-300 font-bold px-3 py-2 rounded-xl border border-amber-500/30">☕ كافتيريا وسناكس</button>
               <button onClick={() => setShowExpenseModal(true)} className="bg-neutral-800 hover:bg-neutral-700 text-rose-300 font-bold px-3 py-2 rounded-xl border border-rose-500/30">📉 تسجيل مصروف</button>
               <button onClick={handleChangePin} className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold px-3 py-2 rounded-xl border border-neutral-700">🔑 تغيير الرمز</button>
-              <button onClick={() => { if(confirm("هل تريد تقفيل الشيفت وطباعة الملخص؟")) alert(`تم تقفيل الشيفت بنجاح!\nصافي كاش الدرج المطلوب: ${netDrawerCash} ج.م`); }} className="bg-rose-600 hover:bg-rose-500 text-white font-black px-3 py-2 rounded-xl">🔒 تقفيل الوردية</button>
+              <button onClick={() => { if(confirm("هل تريد تقفيل الوردية وطباعة الملخص؟")) alert(`تم تقفيل الوردية بنجاح!\nصافي كاش الدرج الفعلي المطلوب: ${netDrawerCash} ج.م`); }} className="bg-rose-600 hover:bg-rose-500 text-white font-black px-3 py-2 rounded-xl">🔒 تقفيل الوردية</button>
             </div>
           </div>
 
+          {/* كروت الإيرادات وكاش الدرج الصافي */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl">
               <span className="text-[10px] text-neutral-400 block font-bold">🌐 إيرادات الويبسايت</span>
               <strong className="text-lg font-black text-blue-400 block mt-1">{onlineRevenue} ج.م</strong>
-              <span className="text-[9px] text-neutral-500">مدفوعات الموقع</span>
+              <span className="text-[9px] text-neutral-500">حجوزات مؤكدة</span>
             </div>
             <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl">
               <span className="text-[10px] text-neutral-400 block font-bold">🏪 كاش الصالة المباشر</span>
               <strong className="text-lg font-black text-emerald-400 block mt-1">{inStoreRevenue} ج.م</strong>
-              <span className="text-[9px] text-neutral-500">قبل خصم المصاريف</span>
+              <span className="text-[9px] text-neutral-500">لعب وسناكس صالة</span>
             </div>
             <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl">
-              <span className="text-[10px] text-neutral-400 block font-bold">☕ إجمالي الكافتيريا</span>
+              <span className="text-[10px] text-neutral-400 block font-bold">🍜 إجمالي الكافتيريا</span>
               <strong className="text-lg font-black text-amber-400 block mt-1">{totalSnacksRevenue} ج.م</strong>
-              <span className="text-[9px] text-neutral-500">مشاريب وإندومي</span>
+              <span className="text-[9px] text-neutral-500">إندومي وشيبسي ومشاريب</span>
             </div>
             <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl">
               <span className="text-[10px] text-rose-300 block font-bold">📉 المصاريف والخوارج</span>
               <strong className="text-lg font-black text-rose-400 block mt-1">{totalExpenses} ج.م</strong>
-              <span className="text-[9px] text-neutral-500">خوارج وبضاعة</span>
+              <span className="text-[9px] text-neutral-500">مشتريات وبضاعة</span>
             </div>
-            <div className="bg-gradient-to-br from-amber-500/20 to-neutral-900 border-2 border-amber-500/40 p-4 rounded-2xl col-span-2 sm:col-span-1">
+            <div className="bg-gradient-to-br from-amber-500/20 to-neutral-900 border-2 border-amber-500/40 p-4 rounded-2xl col-span-2 sm:col-span-1 shadow-lg">
               <span className="text-[10px] text-amber-300 block font-black">💵 صافي كاش الدرج</span>
               <strong className="text-xl font-black text-amber-400 block mt-1">{netDrawerCash} ج.م</strong>
-              <span className="text-[9px] text-neutral-400 font-bold">الكاش الفعلي بالدرج</span>
+              <span className="text-[9px] text-neutral-400 font-bold">المطلوب استلامه بالدرج</span>
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-2xl text-center"><span className="text-[10px] text-amber-300 block font-bold">شاشات مشغولة</span><span className="text-lg font-black text-amber-400">{occupiedScreens} / {totalScreens}</span></div>
-            <div className="bg-emerald-500/10 border border-emerald-500/30 p-3 rounded-2xl text-center"><span className="text-[10px] text-emerald-300 block font-bold">شاشات متاحة</span><span className="text-lg font-black text-emerald-400">{availableScreens}</span></div>
-            <div className="bg-rose-500/10 border border-rose-500/30 p-3 rounded-2xl text-center"><span className="text-[10px] text-rose-300 block font-bold">شاشات صيانة</span><span className="text-lg font-black text-rose-400">{maintenanceScreens}</span></div>
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="bg-amber-500/10 border border-amber-500/30 p-2.5 rounded-2xl"><span className="text-[10px] text-amber-300 block font-bold">شاشات مشغولة</span><strong className="text-base text-amber-400 font-mono">{occupiedScreens} / {totalScreens}</strong></div>
+            <div className="bg-emerald-500/10 border border-emerald-500/30 p-2.5 rounded-2xl"><span className="text-[10px] text-emerald-300 block font-bold">شاشات متاحة</span><strong className="text-base text-emerald-400 font-mono">{availableScreens}</strong></div>
+            <div className="bg-rose-500/10 border border-rose-500/30 p-2.5 rounded-2xl"><span className="text-[10px] text-rose-300 block font-bold">صيانة</span><strong className="text-base text-rose-400 font-mono">{maintenanceScreens}</strong></div>
           </div>
 
-          <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3">
+          {/* الجلسات المباشرة والعداد الحي والإنهاء الطارئ */}
+          <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3 shadow-xl">
             <h3 className="font-bold text-white text-sm flex justify-between items-center">
-              <span>🎮 الجلسات المباشرة (العداد الحي):</span>
+              <span>🎮 الجلسات المباشرة بالصالة (العداد الحي):</span>
               <span className="text-xs text-amber-400 font-mono">{sessions.length} شاشة تعمل الآن</span>
             </h3>
-            {sessions.length === 0 ? <p className="text-neutral-500 py-3 text-center">لا توجد أجهزة قيد التشغيل حالياً.</p> : (
+            {sessions.length === 0 ? <p className="text-neutral-500 py-3 text-center">لا توجد أجهزة قيد التشغيل حالياً بالصالة.</p> : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {sessions.map(s => {
                   const sec = Math.max(0, Math.floor((now - new Date(s.startTime).getTime()) / 1000));
@@ -1168,42 +1679,29 @@
                   const isExpired = s.timerType === 'fixed' && minsBilled >= s.targetMins;
 
                   return (
-                    <div key={s.id} className={`p-3.5 bg-neutral-950 border rounded-2xl space-y-2.5 transition-all ${isExpired ? 'border-rose-500 animate-pulse bg-rose-500/5' : 'border-emerald-500/40'}`}>
+                    <div key={s.id} className={`p-3.5 bg-neutral-950 border rounded-2xl space-y-2.5 transition-all ${isExpired ? 'border-rose-500 animate-pulse bg-rose-500/10' : 'border-emerald-500/40'}`}>
                       <div className="flex justify-between items-center">
                         <div>
                           <strong className="text-white text-xs block">{s.devName}</strong>
-                          <span className="text-[10px] text-neutral-400">{s.customerName} — <strong className="text-amber-400">{s.mode === 'multi' ? 'ملتي (4)' : 'فردي (مع صديق)'}</strong></span>
+                          <span className="text-[10px] text-neutral-400">{s.customerName} — <strong className="text-amber-400">{s.mode === 'multi' ? 'ملتي (4)' : 'فردي'}</strong></span>
                         </div>
-                        <span className={`font-mono font-black text-sm px-2.5 py-0.5 rounded-lg border ${isExpired ? 'bg-rose-500 text-white border-rose-600' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
+                        <span className={`font-mono font-black text-sm px-2.5 py-0.5 rounded-lg border ${isExpired ? 'bg-rose-500 text-white' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
                           {m}:{ss < 10 ? '0' : ''}{ss} {s.timerType === 'fixed' && ` / ${s.targetMins}د`}
                         </span>
                       </div>
-
-                      {isExpired && <div className="text-[10px] bg-rose-500/20 text-rose-300 p-1.5 rounded-lg font-bold text-center">⚠️ انتهى الوقت المحدد للزبون!</div>}
-
                       <div className="flex justify-between text-neutral-400 text-[11px] border-t border-neutral-900 pt-1.5">
                         <span>وقت: {minsBilled} دقيقة ({timeCost} ج)</span>
-                        <span>مشاريب: {s.snacksCost || 0} ج</span>
+                        <span>طلبات: {s.snacksCost || 0} ج</span>
                       </div>
-
-                      {s.snacks && Object.keys(s.snacks).some(k => s.snacks[k] > 0) && (
-                        <div className="bg-neutral-900 p-1.5 rounded-xl text-[10px] text-amber-300 flex flex-wrap gap-2">
-                          {s.snacks.indomie > 0 && <span>🍜 إندومي x{s.snacks.indomie}</span>}
-                          {s.snacks.tea > 0 && <span>☕ شاي x{s.snacks.tea}</span>}
-                          {s.snacks.coffee > 0 && <span>☕ قهوة x{s.snacks.coffee}</span>}
-                        </div>
-                      )}
-
                       <div className="flex gap-1.5 pt-1">
-                        <button type="button" onClick={() => addSnackToSession(s.id, 'indomie')} className="flex-1 py-1 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-800 rounded-lg text-[10px] font-bold">+🍜 إندومي (20)</button>
-                        <button type="button" onClick={() => addSnackToSession(s.id, 'tea')} className="flex-1 py-1 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-800 rounded-lg text-[10px] font-bold">+☕ شاي (25)</button>
-                        <button type="button" onClick={() => addSnackToSession(s.id, 'coffee')} className="flex-1 py-1 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-800 rounded-lg text-[10px] font-bold">+☕ قهوة (50)</button>
+                        <button type="button" onClick={() => addSnackToSession(s.id, 'chips_med')} className="flex-1 py-1 bg-neutral-900 text-neutral-200 border border-neutral-800 rounded-lg text-[10px]">+🥔 شيبسي (15)</button>
+                        <button type="button" onClick={() => addSnackToSession(s.id, 'indomie_beef')} className="flex-1 py-1 bg-neutral-900 text-neutral-200 border border-neutral-800 rounded-lg text-[10px]">+🥩 إندومي (25)</button>
+                        <button type="button" onClick={() => addSnackToSession(s.id, 'tea')} className="flex-1 py-1 bg-neutral-900 text-neutral-200 border border-neutral-800 rounded-lg text-[10px]">+☕ شاي (20)</button>
                       </div>
-
-                      <div className="flex items-center justify-between pt-1 gap-2">
-                        <button onClick={() => setTransferSessionTarget(s)} className="py-1 px-2.5 bg-neutral-800 hover:bg-neutral-700 text-amber-300 rounded-lg text-[10px] font-bold">🔄 نقل جهاز</button>
-                        <button onClick={() => endSession(s, 1)} className="py-1 px-2.5 bg-neutral-800 hover:bg-neutral-700 text-emerald-300 rounded-lg text-[10px] font-bold">🎁 خصم ساعة جوجل</button>
-                        <button onClick={() => endSession(s, 0)} className="py-1 px-3 bg-rose-600 hover:bg-rose-500 text-white font-bold rounded-lg text-xs">إنهاء وبون</button>
+                      <div className="flex flex-wrap items-center justify-between pt-1 gap-1.5 border-t border-neutral-900">
+                        <button onClick={() => setTransferSessionTarget(s)} className="py-1 px-2 bg-neutral-800 text-amber-300 rounded text-[10px] font-bold">🔄 نقل</button>
+                        <button onClick={() => emergencyEndSession(s)} className="py-1 px-2.5 bg-amber-500 hover:bg-amber-400 text-black rounded text-[10px] font-black" title="حساب الدقائق الفعلية بالقرش واسترداد الفارق للزبون">⚡ إنهاء طارئ بالدقيقة</button>
+                        <button onClick={() => endSession(s, 0)} className="py-1 px-3 bg-rose-600 hover:bg-rose-500 text-white font-black rounded text-xs">إنهاء وبون</button>
                       </div>
                     </div>
                   );
@@ -1212,73 +1710,107 @@
             )}
           </div>
 
-          <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3">
+          {/* طلبات شحن المحافظ المعلقة */}
+          {topupRequests.length > 0 && (
+            <div className="bg-neutral-900 border-2 border-emerald-500/40 p-4 rounded-3xl space-y-3 shadow-xl">
+              <h3 className="font-bold text-white text-xs flex justify-between items-center">
+                <span className="text-emerald-400 font-black">🔔 طلبات شحن المحافظ المعلقة ({topupRequests.length}):</span>
+                <span className="text-[10px] text-neutral-400">راجع الإيصال واضغط إيداع</span>
+              </h3>
+              <div className="space-y-2">{topupRequests.map(req => (
+                <div key={req.id} className="p-3 bg-neutral-950 rounded-2xl flex flex-col sm:flex-row justify-between sm:items-center gap-2 border border-neutral-800">
+                  <div>
+                    <strong className="text-white text-xs block">{req.customerName}</strong>
+                    <span className="text-[10px] text-neutral-400">محفظة: <strong className="text-amber-400 font-mono">{req.senderPhone}</strong> | المبلغ: <strong className="text-emerald-400 font-mono text-sm">{req.amount} ج.م</strong></span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {req.receiptImage && <button onClick={() => setViewTopupReceipt(req.receiptImage)} className="px-2.5 py-1 bg-neutral-800 text-amber-300 rounded text-[10px] font-bold">📸 الإيصال</button>}
+                    <button onClick={() => handleApproveTopup(req)} className="px-2.5 py-1 bg-emerald-500 text-black font-black rounded text-[10px]">✅ إيداع بالمحفظة</button>
+                    <button onClick={() => handleRejectTopup(req)} className="px-2 py-1 bg-rose-600/30 text-rose-400 rounded text-[10px]">❌ رفض</button>
+                  </div>
+                </div>
+              ))}</div>
+            </div>
+          )}
+
+          {/* حجوزات الموقع الإلكتروني */}
+          <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3 shadow-xl">
             <h3 className="font-bold text-white text-sm">حجوزات الموقع الإلكتروني ({bookings.length}):</h3>
-            {bookings.length === 0 ? <p className="text-neutral-500 py-2">لا توجد حجوزات أونلاين حتى الآن.</p> : (
-              <div className="space-y-3">{bookings.map(b => (
+            {bookings.length === 0 ? <p className="text-neutral-500 py-2">لا توجد حجوزات أونلاين بعد.</p> : (
+              <div className="space-y-2.5">{bookings.map(b => (
                 <div key={b.id} className="p-3 bg-neutral-950 rounded-2xl flex flex-col md:flex-row justify-between md:items-center gap-3 border border-neutral-800">
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-amber-400 font-mono">{b.ref}</span>
-                      <span className="text-white font-bold">{b.customerName}</span>
-                      <span className="text-neutral-400 text-[10px]">({b.phone})</span>
+                      <strong className="text-white">{b.customerName}</strong>
+                      <span className="text-neutral-400 text-[10px] font-mono">({b.phone})</span>
                     </div>
-                    <div className="text-[10px] text-neutral-400 mt-1">{b.date} الساعة {b.time} — المبلغ: <strong className="text-amber-300">{b.totalCost} ج.م</strong> | محفظة: {b.paymentMethod || 'كاش'}</div>
-                    {b.snacksSummary && <div className="text-[10px] text-amber-300">مشاريب: {b.snacksSummary}</div>}
+                    <div className="text-[10px] text-neutral-400 mt-0.5">{b.date} الساعة {b.time} — المبلغ: <strong className="text-amber-300 font-mono">{b.totalCost} ج</strong> | دفع: {b.paymentMethod || 'كاش'}</div>
+                    {b.snacksSummary && <div className="text-[10px] text-amber-300">طلبات: {b.snacksSummary}</div>}
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">
-                    {b.receiptImage && (
-                      <button onClick={() => setViewReceiptImg(b.receiptImage)} className="px-2.5 py-1 bg-neutral-800 hover:bg-neutral-700 text-amber-300 border border-amber-500/30 rounded text-[10px] font-bold">
-                        📸 الإيصال
-                      </button>
-                    )}
-                    <button onClick={() => setEditingBooking(b)} className="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded text-[10px]">
-                      ✏️ تعديل
-                    </button>
-                    <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${b.status === 'confirmed' ? 'bg-emerald-500/20 text-emerald-400' : (b.status === 'rejected' ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-500/20 text-amber-400')}`}>
+                    {b.receiptImage && <button onClick={() => setViewReceiptImg(b.receiptImage)} className="px-2 py-1 bg-neutral-800 text-amber-300 rounded text-[10px] font-bold">📸 الإيصال</button>}
+                    <button onClick={() => setEditingBooking(b)} className="px-2 py-1 bg-blue-600 text-white font-bold rounded text-[10px]">✏️ تعديل</button>
+                    <button onClick={() => setReceiptData({ ...b, devName: b.items?.[0]?.deviceType || 'PS5 VIP', timeCost: b.devicesCost || 0, durationMins: b.items?.[0]?.duration || 30, mode: b.items?.[0]?.mode || 'single' })} className="px-2 py-1 bg-neutral-800 text-white rounded text-[10px] font-bold">🖨️ بون حراري</button>
+                    <span className={`text-[10px] px-2 py-0.5 rounded font-black ${b.status === 'confirmed' ? 'bg-emerald-500/20 text-emerald-400' : (b.status === 'rejected' ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-500/20 text-amber-400')}`}>
                       {b.status === 'confirmed' ? 'مؤكد ✅' : (b.status === 'rejected' ? 'مرفوض ❌' : 'قيد الانتظار ⏳')}
                     </span>
-                    {b.status !== 'confirmed' && <button onClick={() => updateBookingStatus(b.id, 'confirmed')} className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-black font-bold rounded text-[10px]">تأكيد</button>}
-                    {b.status !== 'rejected' && <button onClick={() => updateBookingStatus(b.id, 'rejected')} className="px-2 py-1 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 rounded text-[10px]">رفض</button>}
+                    {b.status !== 'confirmed' && <button onClick={() => updateBookingStatus(b.id, 'confirmed')} className="px-2.5 py-1 bg-emerald-500 text-black font-black rounded text-[10px]">تأكيد</button>}
+                    {b.status !== 'rejected' && <button onClick={() => updateBookingStatus(b.id, 'rejected')} className="px-2 py-1 bg-rose-500/20 text-rose-400 rounded text-[10px]">رفض</button>}
                   </div>
                 </div>
               ))}</div>
             )}
           </div>
-
-          {showWalkInModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-              <form onSubmit={handleStartWalkIn} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl">
-                <div className="flex justify-between items-center border-b border-neutral-800 pb-2"><h3 className="font-bold text-white text-sm">تسجيل زبون بالصالة (Walk-in)</h3><button type="button" onClick={() => setShowWalkInModal(false)} className="text-neutral-400 hover:text-white font-bold">✕</button></div>
-                <div className="space-y-3">
-                  <input value={walkInCustomerName} onChange={e => setWalkInCustomerName(e.target.value)} placeholder="اسم الزبون" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-xs text-white" />
-                  <select required value={walkInDevice} onChange={e => setWalkInDevice(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-xs text-white font-bold">
-                    <option value="">-- اختر جهازاً متاحاً للتشغيل --</option>
-                    {devices.filter(d => d.status === 'available').map(d => (<option key={d.id} value={d.id}>{d.name} ({d.type})</option>))}
-                  </select>
-                  <div className="grid grid-cols-2 gap-2">
-                    <select value={walkInMode} onChange={e => setWalkInMode(e.target.value)} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-xs text-amber-300 font-bold"><option value="single">فردي (مع صديق - ذراعين)</option><option value="multi">ملتي (4 ذراعات)</option></select>
-                    <select value={walkInTimerType} onChange={e => setWalkInTimerType(e.target.value)} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-xs text-white"><option value="open">وقت مفتوح</option><option value="fixed">وقت محدد</option></select>
+          {/* قسم مراقبة وحذف التقييمات للإدارة */}
+          <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3 shadow-xl">
+            <h3 className="font-bold text-white text-sm flex justify-between items-center">
+              <span>🌟 إدارة التقييمات العامة ({reviews.length}):</span>
+              <span className="text-[10px] text-neutral-400">احذف أي تقييم مسيء بضغطة زر</span>
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-48 overflow-y-auto no-scrollbar">
+              {reviews.map(r => (
+                <div key={r.id} className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 flex justify-between items-center text-xs">
+                  <div>
+                    <div className="flex items-center gap-1.5"><strong className="text-white">{r.author}</strong><span className="text-amber-400 text-[10px]">{'⭐'.repeat(r.rating || 5)}</span></div>
+                    <p className="text-neutral-400 text-[11px] line-clamp-1">{r.comment}</p>
                   </div>
-                  {walkInTimerType === 'fixed' && (
-                    <div><label className="text-[10px] text-neutral-400 block mb-1">المدة المحددة بالدقائق:</label><input type="number" min={15} step={15} value={walkInTargetMins} onChange={e => setWalkInTargetMins(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-xs text-white" /></div>
-                  )}
+                  <button onClick={() => deleteReview(r.id)} className="px-2 py-1 bg-rose-600/20 hover:bg-rose-600/40 text-rose-300 rounded-lg text-[10px] font-bold shrink-0">🗑️ حذف</button>
                 </div>
-                <button type="submit" className="w-full py-3 bg-amber-500 text-black font-black rounded-xl text-xs">بدء تشغيل الجهاز وإشغاله فوراً</button>
+              ))}
+            </div>
+          </div>
+
+          {/* النوافذ المنبثقة للإدارة */}
+          {showWalkInModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+              <form onSubmit={handleStartWalkIn} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-3 shadow-2xl text-xs">
+                <div className="flex justify-between items-center border-b border-neutral-800 pb-2"><h3 className="font-bold text-white">تسجيل زبون صالة مباشر (Walk-in)</h3><button type="button" onClick={() => setShowWalkInModal(false)} className="text-neutral-400 hover:text-white">✕</button></div>
+                <input value={walkInCustomerName} onChange={e => setWalkInCustomerName(e.target.value)} placeholder="اسم الزبون" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" />
+                <select required value={walkInDevice} onChange={e => setWalkInDevice(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white font-bold">
+                  <option value="">-- اختر جهازاً متاحاً للتشغيل --</option>
+                  {devices.filter(d => d.status === 'available').map(d => (<option key={d.id} value={d.id}>{d.name} ({d.type})</option>))}
+                </select>
+                <div className="grid grid-cols-2 gap-2">
+                  <select value={walkInMode} onChange={e => setWalkInMode(e.target.value)} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-amber-300 font-bold"><option value="single">فردي (ذراعين)</option><option value="multi">ملتي (4 ذراعات)</option></select>
+                  <select value={walkInTimerType} onChange={e => setWalkInTimerType(e.target.value)} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white"><option value="open">وقت مفتوح</option><option value="fixed">وقت محدد</option></select>
+                </div>
+                {walkInTimerType === 'fixed' && <div><label className="text-[10px] text-neutral-400 block mb-1">المدة بالدقائق:</label><input type="number" min={15} step={15} value={walkInTargetMins} onChange={e => setWalkInTargetMins(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white" /></div>}
+                <button type="submit" className="w-full py-3 bg-amber-500 text-black font-black rounded-xl shadow-lg shadow-amber-500/20">بدء تشغيل الجهاز فوراً</button>
               </form>
             </div>
           )}
 
           {showQuickPOS && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-              <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
-                <div className="flex justify-between items-center border-b border-neutral-800 pb-2"><h3 className="font-bold text-white text-sm">بيع كافتيريا سريع (كاش صالة)</h3><button onClick={() => setShowQuickPOS(false)} className="text-neutral-400 hover:text-white font-bold">✕</button></div>
-                <div className="space-y-2">{SNACKS_MENU.map(snack => (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+              <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-3 shadow-2xl text-xs">
+                <div className="flex justify-between items-center border-b border-neutral-800 pb-2"><h3 className="font-bold text-white">بيع كافتيريا سريع (كاش صالة)</h3><button onClick={() => setShowQuickPOS(false)} className="text-neutral-400 hover:text-white">✕</button></div>
+                <div className="space-y-1.5 max-h-60 overflow-y-auto no-scrollbar">{SNACKS_MENU.map(snack => (
                   <button key={snack.id} onClick={() => {
                     setCompletedSales([{ id: `sale-${Date.now()}`, devName: 'كافتيريا خارجية', devType: '-', customerName: 'زبون طاولة', mode: '-', durationMins: 0, timeCost: 0, snacks: { [snack.id]: 1 }, snacksCost: snack.price, totalCost: snack.price, source: 'in_store', date: todayStr }, ...completedSales]);
                     setShowQuickPOS(false);
                     alert(`تم تسجيل بيع [${snack.name}] بـ ${snack.price} ج.م في كاش الصالة!`);
-                  }} className="w-full p-3 bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 rounded-xl flex justify-between items-center text-xs text-white">
+                  }} className="w-full p-2.5 bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 rounded-xl flex justify-between items-center text-white">
                     <span>{snack.icon} {snack.name}</span><strong className="text-amber-400">{snack.price} ج.م</strong>
                   </button>
                 ))}</div>
@@ -1287,7 +1819,7 @@
           )}
 
           {showExpenseModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
               <form onSubmit={(e) => {
                 e.preventDefault();
                 const title = e.target.title.value.trim();
@@ -1296,22 +1828,22 @@
                   setExpenses([{ id: `exp-${Date.now()}`, title, amount, date: todayStr }, ...expenses]);
                   setShowExpenseModal(false);
                 }
-              }} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
-                <div className="flex justify-between items-center border-b border-neutral-800 pb-2"><h3 className="font-bold text-white text-sm">تسجيل مصروف جديد من الدرج</h3><button type="button" onClick={() => setShowExpenseModal(false)} className="text-neutral-400 hover:text-white font-bold">✕</button></div>
-                <input required name="title" placeholder="بند الصرف (مثال: بضاعة / صيانة)" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-xs text-white" />
-                <input required type="number" min={1} name="amount" placeholder="المبلغ بالجنيه" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-xs text-white" />
-                <button type="submit" className="w-full py-2.5 bg-rose-600 text-white font-bold rounded-xl text-xs">خصم من الدرج فوراً</button>
+              }} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-3 shadow-2xl text-xs">
+                <div className="flex justify-between items-center border-b border-neutral-800 pb-2"><h3 className="font-bold text-white">تسجيل مصروف جديد من الدرج</h3><button type="button" onClick={() => setShowExpenseModal(false)} className="text-neutral-400 hover:text-white">✕</button></div>
+                <input required name="title" placeholder="بند الصرف (مثال: كرتونة شيبسي / شاي وسكر)" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" />
+                <input required type="number" min={1} name="amount" placeholder="المبلغ بالجنيه" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white font-mono" />
+                <button type="submit" className="w-full py-2.5 bg-rose-600 text-white font-black rounded-xl">خصم من الدرج فوراً</button>
               </form>
             </div>
           )}
 
           {transferSessionTarget && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-              <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
-                <div className="flex justify-between items-center border-b border-neutral-800 pb-2"><h3 className="font-bold text-white text-sm">نقل الجلسة لشاشة أخرى</h3><button onClick={() => setTransferSessionTarget(null)} className="text-neutral-400 hover:text-white font-bold">✕</button></div>
-                <p className="text-neutral-400 text-xs">نقل جلسة: <strong className="text-white">{transferSessionTarget.devName}</strong> مع كامل وقتها ومشاريبها.</p>
-                <div className="space-y-2">{devices.filter(d => d.status === 'available').map(d => (
-                  <button key={d.id} onClick={() => executeTransfer(transferSessionTarget, d.id)} className="w-full p-2.5 bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 rounded-xl text-right text-xs text-amber-300 font-bold block">
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+              <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-3 shadow-2xl text-xs">
+                <div className="flex justify-between items-center border-b border-neutral-800 pb-2"><h3 className="font-bold text-white">نقل الجلسة لشاشة أخرى</h3><button onClick={() => setTransferSessionTarget(null)} className="text-neutral-400 hover:text-white">✕</button></div>
+                <p className="text-neutral-400">نقل جلسة: <strong className="text-white">{transferSessionTarget.devName}</strong> مع كامل وقتها ومشاريبها.</p>
+                <div className="space-y-1.5">{devices.filter(d => d.status === 'available').map(d => (
+                  <button key={d.id} onClick={() => executeTransfer(transferSessionTarget, d.id)} className="w-full p-2.5 bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 rounded-xl text-right text-amber-300 font-bold block">
                     ➔ نقل إلى: {d.name}
                   </button>
                 ))}</div>
@@ -1319,19 +1851,20 @@
             </div>
           )}
 
-          {viewReceiptImg && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+          {(viewReceiptImg || viewTopupReceipt) && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
               <div className="bg-neutral-900 border border-neutral-700 rounded-3xl p-5 max-w-md w-full space-y-3 shadow-2xl text-center">
                 <div className="flex justify-between items-center border-b border-neutral-800 pb-2">
-                  <h3 className="font-bold text-white text-xs">📸 إيصال التحويل الخاص بالزبون</h3>
-                  <button onClick={() => setViewReceiptImg(null)} className="text-neutral-400 hover:text-white font-bold text-sm">✕</button>
+                  <h3 className="font-bold text-white text-xs">📸 إيصال التحويل المرفوع من العميل</h3>
+                  <button onClick={() => { setViewReceiptImg(null); setViewTopupReceipt(null); }} className="text-neutral-400 hover:text-white font-bold text-sm">✕</button>
                 </div>
-                <img src={viewReceiptImg} alt="Receipt Full" className="max-h-[60vh] mx-auto rounded-xl object-contain border border-neutral-800 shadow-md" />
-                <button onClick={() => setViewReceiptImg(null)} className="w-full py-2 bg-neutral-800 text-white rounded-xl text-xs font-bold">إغلاق المعاينة</button>
+                <img src={viewReceiptImg || viewTopupReceipt} alt="Receipt" className="max-h-[65vh] mx-auto rounded-xl object-contain border border-neutral-800 shadow-md" />
+                <button onClick={() => { setViewReceiptImg(null); setViewTopupReceipt(null); }} className="w-full py-2 bg-neutral-800 text-white rounded-xl text-xs font-bold">إغلاق المعاينة</button>
               </div>
             </div>
           )}
 
+          {/* نافذة تعديل الحجز الشاملة للإدارة */}
           {editingBooking && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
               <form onSubmit={(e) => {
@@ -1342,64 +1875,61 @@
                   phone: e.target.cPhone.value.trim(),
                   date: e.target.cDate.value,
                   time: e.target.cTime.value,
+                  items: [{ deviceType: e.target.cDev.value, mode: e.target.cMode.value, duration: Number(e.target.cDur.value) }],
                   totalCost: Number(e.target.cCost.value),
                   status: e.target.cStatus.value
                 };
                 setBookings(bookings.map(x => x.id === updated.id ? updated : x));
                 db.collection('bookings').doc(updated.id).update(updated).catch(console.error);
                 setEditingBooking(null);
-                alert("تم حفظ تعديلات الحجز بنجاح وتحديثها سحابياً!");
-              }} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-3 shadow-2xl">
-                <div className="flex justify-between items-center border-b border-neutral-800 pb-2">
-                  <h3 className="font-bold text-white text-xs">✏️ تعديل بيانات الحجز ({editingBooking.ref})</h3>
-                  <button type="button" onClick={() => setEditingBooking(null)} className="text-neutral-400 hover:text-white font-bold">✕</button>
+                alert("تم حفظ وتحديث الحجز سحابياً بنجاح!");
+              }} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-2.5 shadow-2xl text-xs">
+                <div className="flex justify-between items-center border-b border-neutral-800 pb-2"><h3 className="font-bold text-white text-xs">✏️ تعديل بيانات الحجز ({editingBooking.ref})</h3><button type="button" onClick={() => setEditingBooking(null)} className="text-neutral-400 hover:text-white">✕</button></div>
+                <div><label className="text-[10px] text-neutral-400 block mb-0.5">اسم العميل ورقم الهاتف:</label><div className="grid grid-cols-2 gap-1.5"><input required name="cName" defaultValue={editingBooking.customerName} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white" /><input required name="cPhone" defaultValue={editingBooking.phone} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white font-mono" /></div></div>
+                <div><label className="text-[10px] text-neutral-400 block mb-0.5">التاريخ والوقت:</label><div className="grid grid-cols-2 gap-1.5"><input type="date" required name="cDate" defaultValue={editingBooking.date} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white" /><input type="time" required name="cTime" defaultValue={editingBooking.time} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white" /></div></div>
+                <div><label className="text-[10px] text-neutral-400 block mb-0.5">تعديل الجهاز ونمط اللعب:</label><div className="grid grid-cols-3 gap-1.5">
+                  <select name="cDev" defaultValue={editingBooking.items?.[0]?.deviceType || 'PS5'} className="bg-neutral-950 border border-neutral-800 rounded-xl p-1.5 text-white font-bold"><option value="PS5">PS5 VIP</option><option value="PS4">PS4 Pro</option></select>
+                  <select name="cMode" defaultValue={editingBooking.items?.[0]?.mode || 'single'} className="bg-neutral-950 border border-neutral-800 rounded-xl p-1.5 text-amber-300 font-bold"><option value="single">فردي</option><option value="multi">ملتي</option></select>
+                  <select name="cDur" defaultValue={editingBooking.items?.[0]?.duration || 30} className="bg-neutral-950 border border-neutral-800 rounded-xl p-1.5 text-white font-bold"><option value={30}>30د</option><option value={60}>ساعة</option><option value={120}>ساعتان</option></select>
+                </div></div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div><label className="text-[10px] text-neutral-400 block mb-0.5">المبلغ (ج.م):</label><input type="number" required min={0} name="cCost" defaultValue={editingBooking.totalCost} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white font-bold font-mono" /></div>
+                  <div><label className="text-[10px] text-neutral-400 block mb-0.5">حالة الحجز:</label><select name="cStatus" defaultValue={editingBooking.status} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white font-bold"><option value="awaiting_admin_approval">قيد الانتظار ⏳</option><option value="confirmed">مؤكد ✅</option><option value="rejected">مرفوض ❌</option></select></div>
                 </div>
-                <div className="space-y-2">
-                  <div><label className="text-[10px] text-neutral-400 block mb-0.5">اسم العميل:</label><input required name="cName" defaultValue={editingBooking.customerName} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-xs text-white" /></div>
-                  <div><label className="text-[10px] text-neutral-400 block mb-0.5">رقم الهاتف:</label><input required name="cPhone" defaultValue={editingBooking.phone} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-xs text-white" /></div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div><label className="text-[10px] text-neutral-400 block mb-0.5">التاريخ:</label><input type="date" required name="cDate" defaultValue={editingBooking.date} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-xs text-white" /></div>
-                    <div><label className="text-[10px] text-neutral-400 block mb-0.5">الوقت:</label><input type="time" required name="cTime" defaultValue={editingBooking.time} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-xs text-white" /></div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div><label className="text-[10px] text-neutral-400 block mb-0.5">المبلغ (ج.م):</label><input type="number" required min={0} name="cCost" defaultValue={editingBooking.totalCost} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-xs text-white font-bold" /></div>
-                    <div>
-                      <label className="text-[10px] text-neutral-400 block mb-0.5">الحالة:</label>
-                      <select name="cStatus" defaultValue={editingBooking.status} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-xs text-white font-bold">
-                        <option value="awaiting_admin_approval">قيد الانتظار ⏳</option>
-                        <option value="confirmed">مؤكد ✅</option>
-                        <option value="rejected">مرفوض ❌</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-                <button type="submit" className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs mt-2">حفظ التعديلات سحابياً</button>
+                <button type="submit" className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl mt-1">حفظ وتحديث الحجز سحابياً</button>
               </form>
             </div>
           )}
 
+          {/* الفاتورة الحرارية المخصصة للطابعات 80mm */}
           {receiptData && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-              <div className="bg-white text-black rounded-3xl p-6 max-w-sm w-full space-y-4 shadow-2xl">
-                <div id="printable-receipt" className="space-y-3 text-center border-b pb-4">
-                  <h2 className="font-black text-xl">TWIX Gaming Lounge</h2>
-                  <p className="text-xs text-neutral-600">فاتورة حساب جلسة صالة</p>
-                  <div className="text-xs text-right space-y-1 pt-2 border-t border-dashed">
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+              <div className="bg-white text-black rounded-3xl p-6 max-w-xs w-full space-y-3 shadow-2xl text-xs">
+                <div id="printable-receipt" className="space-y-2 text-center border-b pb-3">
+                  <h2 className="font-black text-lg">TWIX Gaming Lounge</h2>
+                  <p className="text-[10px] text-neutral-600">بون حساب معتمد — ت: {SITE_CONFIG.phone}</p>
+                  <div className="text-[11px] text-right space-y-1 pt-2 border-t border-dashed">
                     <div>الجهاز: <strong>{receiptData.devName}</strong></div>
                     <div>العميل: <strong>{receiptData.customerName}</strong></div>
-                    <div>نوع اللعب: <strong>{receiptData.mode === 'multi' ? 'ملتي (4 ذراعات)' : 'فردي (مع صديق)'}</strong></div>
-                    <div>مدة اللعب: <strong>{receiptData.durationMins} دقيقة</strong> ({receiptData.timeCost} ج)</div>
-                    {receiptData.snacksCost > 0 && <div>المشاريب والكافتيريا: <strong>{receiptData.snacksCost} ج</strong></div>}
+                    <div>النمط: <strong>{receiptData.mode === 'multi' ? 'ملتي (4 ذراعات)' : 'فردي'}</strong></div>
+                    <div>مدة اللعب: <strong>{receiptData.durationMins || 30} دقيقة</strong> ({receiptData.timeCost || 0} ج)</div>
+                    {receiptData.snacksCost > 0 && <div>الطلبات والكافتيريا: <strong>{receiptData.snacksCost} ج</strong></div>}
+                    {receiptData.isEmergency && (
+                      <div className="p-1.5 bg-neutral-100 rounded text-center border border-black/10 mt-1">
+                        <span className="block font-bold">⚡ إنهاء طارئ بالدقيقة الفعلية</span>
+                        {receiptData.refundAmount > 0 && <span className="block font-black text-emerald-700">المتبقي استرداده للعميل: {receiptData.refundAmount} ج.م</span>}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-lg font-black pt-2 border-t border-dashed flex justify-between">
+                  <div className="text-base font-black pt-2 border-t border-dashed flex justify-between">
                     <span>الإجمالي المستحق:</span>
                     <span>{receiptData.totalCost} ج.م</span>
                   </div>
-                  <p className="text-[10px] text-neutral-500 pt-1">شكراً لزيارتكم TWIX! نتمنى لكم يوماً سعيداً 🎮</p>
+                  <p className="text-[9px] text-neutral-500 pt-1 font-mono">شكراً لزيارتكم TWIX! نتمنى لكم يوماً سعيداً 🎮</p>
                 </div>
-                <div className="flex gap-2 pt-2">
-                  <button onClick={() => window.print()} className="flex-1 py-2.5 bg-black text-white font-bold rounded-xl text-xs">🖨️ طباعة البون</button>
-                  <button onClick={() => setReceiptData(null)} className="flex-1 py-2.5 bg-neutral-200 text-neutral-800 font-bold rounded-xl text-xs">إغلاق</button>
+                <div className="flex gap-2 pt-1">
+                  <button onClick={() => window.print()} className="flex-1 py-2 bg-black text-white font-bold rounded-xl text-xs">🖨️ طباعة البون الحراري</button>
+                  <button onClick={() => setReceiptData(null)} className="flex-1 py-2 bg-neutral-200 text-neutral-800 font-bold rounded-xl text-xs">إغلاق</button>
                 </div>
               </div>
             </div>
