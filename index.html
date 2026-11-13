@@ -3636,6 +3636,711 @@
         </div>
       );
                       }
-    
-      
+    // ==========================================
+    // 16. لوحة تحكم الأدمن المركزية والشفتين (AdminPage)
+    // ==========================================
+    function AdminPage({
+      config, setConfig, devices, setDevices, sessions, setSessions,
+      bookings, setBookings, partyBookings, setPartyBookings,
+      completedSales, setCompletedSales, expenses, setExpenses, debts, setDebts,
+      matches, setMatches, challenges, setChallenges, snacksMenu, setSnacksMenu,
+      bundles, setBundles, wheelSegments, setWheelSegments,
+      inLoungeRequests, setInLoungeRequests, suggestions, setSuggestions,
+      reviews, setReviews, globalFrozen, setGlobalFrozen, now
+    }) {
+      // التحقق من الشفت برمزين سريين منفصلين: شفت 1 (1470) | شفت 2 (1438)
+      const [adminShift, setAdminShift] = useState(() => sessionStorage.getItem('twix_admin_shift') || null);
+      const [inputPin, setInputPin] = useState('');
+      const [pinError, setPinError] = useState(false);
+
+      // نوافذ الأدمن المنبثقة
+      const [showWalkInModal, setShowWalkInModal] = useState(false);
+      const [showCreateCustomerModal, setShowCreateCustomerModal] = useState(false);
+      const [showConfigModal, setShowConfigModal] = useState(false);
+      const [showStockModal, setShowStockModal] = useState(false);
+      const [showExpenseModal, setShowExpenseModal] = useState(false);
+      const [showDebtModal, setShowDebtModal] = useState(false);
+      const [showShiftReport, setShowShiftReport] = useState(false);
+      const [viewDocImage, setViewDocImage] = useState(null);
+      const [printableReceipt, setPrintableReceipt] = useState(null);
+      const [selectedArchiveDate, setSelectedArchiveDate] = useState(() => new Date().toISOString().slice(0, 10));
+
+      const todayStr = new Date().toISOString().slice(0, 10);
+
+      // تسجيل دخول الأدمن وفحص كود الشفت
+      const handleAdminAuth = (e) => {
+        e.preventDefault();
+        const p = inputPin.trim();
+        if (p === '1470') {
+          setAdminShift('shift_1');
+          sessionStorage.setItem('twix_admin_shift', 'shift_1');
+          setPinError(false);
+          playNotificationSound('cash');
+        } else if (p === '1438') {
+          setAdminShift('shift_2');
+          sessionStorage.setItem('twix_admin_shift', 'shift_2');
+          setPinError(false);
+          playNotificationSound('cash');
+        } else {
+          setPinError(true);
+          setInputPin('');
+        }
+      };
+
+      // عزل حسابات ودفاتر الشفتين تماماً (Shift Isolation)
+      const currentShiftSales = completedSales.filter(s => (s.shiftId || 'shift_1') === adminShift && s.date === todayStr);
+      const currentShiftExpenses = expenses.filter(e => (e.shiftId || 'shift_1') === adminShift && e.date === todayStr);
+      const currentShiftDebts = debts.filter(d => (d.shiftId || 'shift_1') === adminShift);
+
+      const inStoreRevenue = currentShiftSales.reduce((sum, s) => sum + (s.totalCost || 0), 0);
+      const onlineRevenue = bookings.filter(b => b.status === 'confirmed' && b.date === todayStr).reduce((sum, b) => sum + (b.totalCost || 0), 0);
+      const totalExpenses = currentShiftExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+      const totalUnpaidDebts = currentShiftDebts.filter(d => !d.paid).reduce((sum, d) => sum + Number(d.amount || 0), 0);
+      const netDrawerCash = inStoreRevenue - totalExpenses;
+
+      // شاشة قفل الأدمن المركزية
+      if (!adminShift) {
+        return (
+          <div className="max-w-sm mx-auto py-16 px-4 space-y-4 text-xs text-center">
+            <div className="w-16 h-16 bg-amber-500/10 border-2 border-amber-500/40 rounded-3xl flex items-center justify-center mx-auto text-amber-400 text-3xl font-black">
+              🔒
+            </div>
+            <h1 className="text-xl font-black text-white">لوحة تحكم إدارة {config.loungeName}</h1>
+            <p className="text-neutral-400 text-[11px]">
+              أدخل الرمز السري لشفت العمل: [شِفت 1: 1470] أو [شِفت 2: 1438]
+            </p>
+            {pinError && (
+              <div className="p-2.5 bg-rose-500/10 border border-rose-500/40 text-rose-300 rounded-xl font-bold">
+                ⚠️ الرمز غير صحيح، يرجى كتابة رمز الشفت المصرح به.
+              </div>
+            )}
+            <form onSubmit={handleAdminAuth} className="space-y-3">
+              <input 
+                type="password" 
+                inputMode="numeric" 
+                autoFocus 
+                value={inputPin} 
+                onChange={e => setInputPin(e.target.value)} 
+                placeholder="••••" 
+                className="w-full bg-neutral-900 border border-neutral-800 rounded-2xl py-3 text-center text-3xl tracking-widest text-white font-mono focus:border-amber-500 outline-none" 
+              />
+              <button type="submit" className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-xl text-sm shadow-lg">
+                تأكيد دخول الشِفت ➔
+              </button>
+            </form>
+          </div>
+        );
+      }
+
+      return (
+        <div className="max-w-7xl mx-auto py-6 space-y-6 text-xs">
+          {/* الشريط العلوي والأزرار الإدارية السريعة */}
+          <div className="flex flex-wrap justify-between items-center bg-neutral-900 p-4 rounded-3xl border border-neutral-800 gap-3 shadow-xl">
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="font-black text-white text-base">لوحة تحكم وتشغيل {config.loungeName} المركزية</h2>
+                <span className="px-2.5 py-0.5 rounded-full font-black text-[10px] bg-amber-500 text-black font-mono">
+                  {adminShift === 'shift_1' ? 'شِفت 1 (صباحي)' : 'شِفت 2 (مسائي)'}
+                </span>
+              </div>
+              <span className="text-[10px] text-emerald-400 font-bold block mt-0.5">
+                🟢 الدرج متزامن سحابياً مع Firebase | مواعيد الصالة: {config.openingHours}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={() => setShowWalkInModal(true)} className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3 py-2 rounded-xl shadow">
+                + زبون صالة (Walk-in)
+              </button>
+              <button onClick={() => setShowCreateCustomerModal(true)} className="bg-blue-600 hover:bg-blue-500 text-white font-black px-3 py-2 rounded-xl shadow">
+                👤 تفعيل حساب زائر
+              </button>
+              <button onClick={() => setShowStockModal(true)} className="bg-neutral-800 hover:bg-neutral-700 text-cyan-300 px-3 py-2 rounded-xl border border-cyan-500/30 font-bold">
+                📦 المخزون والبضاعة
+              </button>
+              <button onClick={() => setShowConfigModal(true)} className="bg-neutral-800 hover:bg-neutral-700 text-amber-300 px-3 py-2 rounded-xl border border-amber-500/30 font-bold">
+                ⚙️ إعدادات الصالة والهوية
+              </button>
+              <button onClick={() => setGlobalFrozen(!globalFrozen)} className={`px-3 py-2 rounded-xl font-black transition-all ${globalFrozen ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white animate-pulse'}`}>
+                {globalFrozen ? '▶️ استئناف الوقت' : '⏸️ تجميد طوارئ كهرباء'}
+              </button>
+              <button onClick={() => setShowExpenseModal(true)} className="bg-neutral-800 hover:bg-neutral-700 text-rose-300 px-3 py-2 rounded-xl border border-rose-500/30 font-bold">
+                📉 تسجيل مصروف
+              </button>
+              <button onClick={() => setShowDebtModal(true)} className="bg-neutral-800 hover:bg-neutral-700 text-amber-300 px-3 py-2 rounded-xl border border-amber-500/30 font-bold">
+                📝 دفتر الشكك ({totalUnpaidDebts}ج)
+              </button>
+              <button onClick={() => setShowShiftReport(true)} className="bg-neutral-800 hover:bg-neutral-700 text-emerald-300 px-3 py-2 rounded-xl border border-emerald-500/30 font-bold">
+                📊 تقرير الوردية للواتساب
+              </button>
+              <button onClick={() => { setAdminShift(null); sessionStorage.removeItem('twix_admin_shift'); }} className="p-2 bg-neutral-950 text-neutral-400 hover:text-white rounded-xl border border-neutral-800" title="تسجيل خروج الشفت">
+                🚪 خروج
+              </button>
+            </div>
+          </div>
+
+          {/* كروت الإيرادات وصافي كاش الدرج الدقيق */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl">
+              <span className="text-[10px] text-neutral-400 block font-bold">🌐 إيرادات الأونلاين المعتمدة</span>
+              <strong className="text-lg font-black text-blue-400 block mt-1 font-mono">{onlineRevenue} ج.م</strong>
+              <span className="text-[9px] text-neutral-500">حجوزات وباقات اليوم</span>
+            </div>
+            <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl">
+              <span className="text-[10px] text-neutral-400 block font-bold">🏪 كاش الصالة المباشر ({adminShift})</span>
+              <strong className="text-lg font-black text-emerald-400 block mt-1 font-mono">{inStoreRevenue} ج.م</strong>
+              <span className="text-[9px] text-neutral-500">تحصيل جلسات وسناكس يداً بيد</span>
+            </div>
+            <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl">
+              <span className="text-[10px] text-rose-300 block font-bold">📉 مصاريف وخوارج الشِفت</span>
+              <strong className="text-lg font-black text-rose-400 block mt-1 font-mono">{totalExpenses} ج.م</strong>
+              <span className="text-[9px] text-neutral-500">مشتريات وبضاعة مخصومة من الدرج</span>
+            </div>
+            <div className="bg-gradient-to-br from-amber-500/25 to-neutral-900 border-2 border-amber-500/50 p-4 rounded-2xl shadow-lg">
+              <span className="text-[10px] text-amber-300 block font-black">💵 صافي كاش الدرج الفعلي المطلوب</span>
+              <strong className="text-xl font-black text-amber-400 block mt-1 font-mono">{netDrawerCash} ج.م</strong>
+              <span className="text-[9px] text-neutral-400 font-bold">المطلوب تواجده بالدرج لهذا الشِفت</span>
+            </div>
+          </div>
+
+          {/* نافذة تعديل إعدادات وهوية الصالة لايف (Modal) */}
+          {showConfigModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const newCfg = {
+                  ...config,
+                  loungeName: e.target.cName.value.trim(),
+                  phone: e.target.cPhone.value.trim(),
+                  whatsappNumber: e.target.cWa.value.trim(),
+                  mapsUrl: e.target.cMaps.value.trim(),
+                  cityLocation: e.target.cCity.value.trim(),
+                  openingHours: e.target.cHours.value.trim(),
+                  socialLinks: {
+                    facebook: e.target.cFB.value.trim(),
+                    instagram: e.target.cIG.value.trim(),
+                    tiktok: e.target.cTT.value.trim()
+                  },
+                  termsText: e.target.cTerms.value.trim()
+                };
+                setConfig(newCfg);
+                db.collection('site_settings').doc('config').set(newCfg);
+                setShowConfigModal(false);
+                playNotificationSound('cash');
+                alert("تم تحديث وحفظ إعدادات وهوية الصالة والروابط سحابياً بنجاح!");
+              }} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-lg w-full space-y-3.5 shadow-2xl text-xs max-h-[90vh] overflow-y-auto no-scrollbar">
+                <div className="flex justify-between items-center border-b border-neutral-800 pb-2">
+                  <h3 className="font-bold text-white text-sm">⚙️ تعديل إعدادات وهوية الصالة والروابط الحية</h3>
+                  <button type="button" onClick={() => setShowConfigModal(false)} className="text-neutral-400 hover:text-white font-bold">✕</button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[10px] text-neutral-400 block mb-1">اسم الصالة (مثلاً: TWIX أو REVO) *:</label>
+                    <input required name="cName" defaultValue={config.loungeName} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white font-bold" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-neutral-400 block mb-1">موقع الصالة والمدينة *:</label>
+                    <input required name="cCity" defaultValue={config.cityLocation} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[10px] text-neutral-400 block mb-1">رقم الهاتف الرسمي للكاشير *:</label>
+                    <input required name="cPhone" defaultValue={config.phone} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white font-mono" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-neutral-400 block mb-1">رقم الواتساب بالصيغة الدولية (201xxxxxxxx) *:</label>
+                    <input required name="cWa" defaultValue={config.whatsappNumber} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white font-mono" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-neutral-400 block mb-1">مواعيد العمل الرسمية (مثلاً: من 12 ظهراً لـ 12 بالليل) *:</label>
+                  <input required name="cHours" defaultValue={config.openingHours} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white" />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-neutral-400 block mb-1">رابط خرائط Google Maps GPS *:</label>
+                  <input required name="cMaps" defaultValue={config.mapsUrl} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white font-mono text-xs text-left" />
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-[9px] text-neutral-400 block mb-0.5">رابط فيسبوك:</label>
+                    <input name="cFB" defaultValue={config.socialLinks?.facebook} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-1.5 text-white text-[10px]" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-neutral-400 block mb-0.5">رابط إنستجرام:</label>
+                    <input name="cIG" defaultValue={config.socialLinks?.instagram} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-1.5 text-white text-[10px]" />
+                  </div>
+                  <div>
+                    <label className="text-[9px] text-neutral-400 block mb-0.5">رابط تيك توك:</label>
+                    <input name="cTT" defaultValue={config.socialLinks?.tiktok} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-1.5 text-white text-[10px]" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-neutral-400 block mb-1">نصوص الشروط والأحكام الرسمية:</label>
+                  <textarea rows={3} name="cTerms" defaultValue={config.termsText} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white text-[11px]" />
+                </div>
+
+                <button type="submit" className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-xl shadow-lg">
+                  حفظ وتطبيق التعديلات سحابياً فوراً ➔
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* نافذة إدارة المخزون والبضاعة الذكي (Modal) */}
+          {showStockModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+              <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl text-xs max-h-[85vh] overflow-y-auto no-scrollbar">
+                <div className="flex justify-between items-center border-b border-neutral-800 pb-2">
+                  <h3 className="font-bold text-white text-sm">📦 إدارة مخزون البضاعة والكافتيريا والخصم التلقائي</h3>
+                  <button type="button" onClick={() => setShowStockModal(false)} className="text-neutral-400 hover:text-white font-bold">✕</button>
+                </div>
+
+                <div className="space-y-2.5">
+                  {snacksMenu.map(s => (
+                    <div key={s.id} className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 flex justify-between items-center">
+                      <div>
+                        <strong className="text-white text-xs block">{s.icon} {s.name}</strong>
+                        <span className="text-amber-400 font-mono text-[11px]">السعر: {s.price} ج.م</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-neutral-400">الكمية بالمخزن:</span>
+                        <input 
+                          type="number" 
+                          min={0} 
+                          defaultValue={s.stock || 20} 
+                          onChange={(e) => {
+                            const newStock = Number(e.target.value);
+                            setSnacksMenu(prev => prev.map(x => x.id === s.id ? { ...x, stock: newStock } : x));
+                          }} 
+                          className="w-16 bg-neutral-900 border border-neutral-800 rounded-xl p-1.5 text-center text-white font-mono font-bold" 
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    db.collection('inventory').doc('snacks').set({ menu: snacksMenu });
+                    setShowStockModal(false);
+                    playNotificationSound('cash');
+                    alert('تم تحديث المخزون والكميات بنجاح!');
+                  }} 
+                  className="w-full py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-xl shadow">
+                  حفظ وتأكيد المخزون
+                </button>
+              </div>
+            </div>
+          )}
+      {/* الجلسات والشاشات المباشرة الحالية بالصالة */}
+          <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-4 shadow-xl">
+            <h3 className="font-bold text-white text-sm flex justify-between items-center border-b border-neutral-800 pb-2">
+              <span>🎮 الشاشات والجلسات المباشرة الشغالة الآن ({sessions.length}):</span>
+              <span className="text-amber-400 font-mono text-xs">{busyCount} شاشات مشغولة</span>
+            </h3>
+
+            {sessions.length === 0 ? (
+              <p className="text-neutral-500 py-6 text-center">لا توجد أجهزة قيد التشغيل حالياً. اضغط "+ زبون صالة (Walk-in)" لبدء جلسة جديدة.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {sessions.map(s => {
+                  const elapsedSec = Math.max(0, Math.floor((now - new Date(s.startTime).getTime()) / 1000));
+                  const m = Math.floor(elapsedSec / 60), ss = elapsedSec % 60;
+                  const minsBilled = Math.max(1, Math.ceil(elapsedSec / 60));
+                  const timeCost = calcDevicePrice(s.devType, s.mode, minsBilled);
+
+                  return (
+                    <div key={s.id} className="p-4 bg-neutral-950 border border-emerald-500/40 rounded-2xl space-y-3 shadow-lg">
+                      <div className="flex justify-between items-center border-b border-neutral-900 pb-2">
+                        <div>
+                          <strong className="text-white text-xs block">{s.devName}</strong>
+                          <span className="text-[10px] text-neutral-400">{s.customerName} — <strong className="text-amber-400">{s.mode === 'multi' ? 'ملتي (4 دراعات)' : 'فردي'}</strong></span>
+                          <span className="text-[10px] text-cyan-400 block font-mono">دراعات: {s.controllers || 'C1, C2'}</span>
+                        </div>
+                        <span className="font-mono font-black text-sm px-2.5 py-1 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                          {m}:{ss < 10 ? '0' : ''}{ss}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between text-neutral-300 text-[11px]">
+                        <span>وقت: {minsBilled} دقيقة ({timeCost} ج)</span>
+                        <span>طلبات كافتيريا: {s.snacksCost || 0} ج.م</span>
+                      </div>
+
+                      {/* إضافة طلبات كافتيريا سريعة للجلسة مع خصم المخزون */}
+                      <div className="flex gap-1.5 pt-1">
+                        <button type="button" onClick={() => {
+                          setSessions(sessions.map(x => x.id === s.id ? { ...x, snacksCost: (x.snacksCost || 0) + 15 } : x));
+                          setSnacksMenu(prev => prev.map(sn => sn.id === 'chips_med' ? { ...sn, stock: Math.max(0, (sn.stock || 20) - 1) } : sn));
+                        }} className="flex-1 py-1 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-800 rounded-lg text-[10px]">+🥔 شيبسي (15)</button>
+
+                        <button type="button" onClick={() => {
+                          setSessions(sessions.map(x => x.id === s.id ? { ...x, snacksCost: (x.snacksCost || 0) + 25 } : x));
+                          setSnacksMenu(prev => prev.map(sn => sn.id.startsWith('indomie') ? { ...sn, stock: Math.max(0, (sn.stock || 20) - 1) } : sn));
+                        }} className="flex-1 py-1 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-800 rounded-lg text-[10px]">+🥩 إندومي (25)</button>
+
+                        <button type="button" onClick={() => {
+                          setSessions(sessions.map(x => x.id === s.id ? { ...x, snacksCost: (x.snacksCost || 0) + 20 } : x));
+                        }} className="flex-1 py-1 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-800 rounded-lg text-[10px]">+☕ شاي (20)</button>
+                      </div>
+
+                      {/* التحكم في الجلسة: إنهاء طارئ بالدقيقة، أو إنهاء بفحص الدراعات وطباعة البون */}
+                      <div className="flex flex-wrap items-center justify-between gap-1.5 pt-2 border-t border-neutral-900">
+                        <button type="button" onClick={() => {
+                          const hourRate = (PRICING[s.devType] || PRICING.PS4)[s.mode === 'multi' ? 'multi' : 'single'].ratePerHour;
+                          const exactTimeCost = Math.ceil(minsBilled * (hourRate / 60));
+                          const total = exactTimeCost + (s.snacksCost || 0);
+                          const sale = { id: `sale-${Date.now()}`, devName: s.devName, customerName: s.customerName, durationMins: minsBilled, totalCost: total, source: 'in_store', shiftId: adminShift, date: todayStr };
+                          
+                          setCompletedSales([sale, ...completedSales]);
+                          setSessions(sessions.filter(x => x.id !== s.id));
+                          setDevices(devices.map(d => d.id === s.deviceId ? { ...d, status: 'available' } : d));
+                          setPrintableReceipt(sale);
+                          playNotificationSound('cash');
+                        }} className="py-1 px-2.5 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-lg text-[10px]">
+                          ⚡ إنهاء طارئ بالدقيقة
+                        </button>
+
+                        <button type="button" onClick={() => {
+                          const isSafe = confirm(`فحص الدراعات (${s.controllers || 'C1, C2'}):\nهل تم استلام أذرع التحكم سليمة ومفحوصة بدون أي كسر بالأزرار أو الأنالوج؟`);
+                          const total = timeCost + (s.snacksCost || 0);
+                          const sale = { id: `sale-${Date.now()}`, devName: s.devName, customerName: s.customerName, durationMins: minsBilled, totalCost: total, source: 'in_store', shiftId: adminShift, date: todayStr, controllersCheck: isSafe ? 'سليمة ومفحوصة' : 'يوجد تلف مسجل' };
+                          
+                          setCompletedSales([sale, ...completedSales]);
+                          setSessions(sessions.filter(x => x.id !== s.id));
+                          setDevices(devices.map(d => d.id === s.deviceId ? { ...d, status: 'available' } : d));
+                          setPrintableReceipt(sale);
+                          playNotificationSound('cash');
+                        }} className="py-1 px-3 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-lg text-xs">
+                          إنهاء وبون 🖨️
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* إدارة مسابقة توقعات الماتشات وصرف 35 ج.م */}
+          <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3 shadow-xl">
+            <div className="flex justify-between items-center border-b border-neutral-800 pb-2">
+              <h3 className="font-bold text-white text-sm">⚽ إدارة توقعات الماتشات (جائزة 35 ج.م فوري):</h3>
+              <button type="button" onClick={() => {
+                const tA = prompt("اسم الفريق الأول:", "الأهلي");
+                const tB = prompt("اسم الفريق الثاني:", "الزمالك");
+                const tTime = prompt("موعد الماتش:", "الليلة 8:00 م");
+                if (tA && tB) {
+                  const newM = { id: `m-${Date.now()}`, teamA: tA, teamB: tB, time: tTime || 'الليلة', status: 'open', scoreA: 0, scoreB: 0, predictions: {} };
+                  setMatches([newM, ...matches]);
+                  alert("تمت إضافة الماتش وتفعيله للتوقع فوراً بالموقع!");
+                }
+              }} className="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-black font-black rounded-xl text-xs">
+                + إضافة ماتش جديد
+              </button>
+            </div>
+
+            <div className="space-y-2.5">
+              {matches.map(m => (
+                <div key={m.id} className="p-3.5 bg-neutral-950 rounded-2xl border border-neutral-800 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+                  <div>
+                    <strong className="text-white text-xs block">{m.teamA} ضد {m.teamB} ({m.time})</strong>
+                    <span className="text-[10px] text-neutral-400">إجمالي المتوقعين: {Object.keys(m.predictions || {}).length} لاعب | الحالة: {m.status === 'open' ? 'مفتوح' : 'مغلق'}</span>
+                  </div>
+
+                  {m.status === 'open' && (
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 bg-neutral-900 p-1 rounded-xl border border-neutral-800">
+                        <span className="text-[10px] text-neutral-400">{m.teamA}:</span>
+                        <button type="button" onClick={() => setMatches(matches.map(x => x.id === m.id ? { ...x, scoreA: Math.max(0, x.scoreA - 1) } : x))} className="w-5 h-5 bg-neutral-800 text-white rounded font-bold">-</button>
+                        <span className="font-mono font-bold text-amber-400 px-1">{m.scoreA}</span>
+                        <button type="button" onClick={() => setMatches(matches.map(x => x.id === m.id ? { ...x, scoreA: x.scoreA + 1 } : x))} className="w-5 h-5 bg-amber-500 text-black rounded font-bold">+</button>
+                      </div>
+
+                      <div className="flex items-center gap-1 bg-neutral-900 p-1 rounded-xl border border-neutral-800">
+                        <span className="text-[10px] text-neutral-400">{m.teamB}:</span>
+                        <button type="button" onClick={() => setMatches(matches.map(x => x.id === m.id ? { ...x, scoreB: Math.max(0, x.scoreB - 1) } : x))} className="w-5 h-5 bg-neutral-800 text-white rounded font-bold">-</button>
+                        <span className="font-mono font-bold text-amber-400 px-1">{m.scoreB}</span>
+                        <button type="button" onClick={() => setMatches(matches.map(x => x.id === m.id ? { ...x, scoreB: x.scoreB + 1 } : x))} className="w-5 h-5 bg-amber-500 text-black rounded font-bold">+</button>
+                      </div>
+
+                      <button type="button" onClick={() => {
+                        let winnersCount = 0;
+                        const preds = m.predictions || {};
+                        Object.keys(preds).forEach(phoneKey => {
+                          const p = preds[phoneKey];
+                          if (Number(p.scoreA) === m.scoreA && Number(p.scoreB) === m.scoreB) {
+                            winnersCount++;
+                            db.collection('customers').doc(phoneKey).set({
+                              walletBalance: firebase.firestore.FieldValue.increment(35)
+                            }, { merge: true });
+                          }
+                        });
+                        setMatches(matches.map(x => x.id === m.id ? { ...x, status: 'closed' } : x));
+                        playNotificationSound('cash');
+                        alert(`تم اعتماد النتيجة وصرف 35 ج.م في محفظة (${winnersCount}) فائز توقعوا النتيجة بالمللي!`);
+                      }} className="px-3 py-1.5 bg-emerald-500 text-black font-black rounded-xl text-xs">
+                        🚀 اعتماد وصرف 35 ج
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* حجوزات الأونلاين ومطابقة إيصالات الدفع الهجين */}
+          <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3 shadow-xl">
+            <h3 className="font-bold text-white text-sm">حجوزات الموقع الإلكتروني ومطابقة الإيصالات ({bookings.length}):</h3>
+            <div className="space-y-2">
+              {bookings.map(b => (
+                <div key={b.id} className="p-3 bg-neutral-950 rounded-2xl flex flex-col md:flex-row justify-between md:items-center gap-2.5 border border-neutral-800">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono font-bold text-amber-400">{b.ref}</span>
+                      <strong className="text-white text-xs">{b.customerName} ({b.phone})</strong>
+                    </div>
+                    <div className="text-[11px] text-neutral-400 mt-0.5">
+                      <span>الأجهزة: {b.devicesSummary}</span> — <span className="text-amber-300 font-mono">الإجمالي: {b.totalCost} ج</span>
+                      {b.walletDeduction > 0 && <span className="text-emerald-400 font-mono"> (مخصوم محفظة: {b.walletDeduction}ج | محول كاش: {b.remainingCashToTransfer}ج)</span>}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {b.receiptScreenshot && (
+                      <button type="button" onClick={() => setViewDocImage(b.receiptScreenshot)} className="px-2.5 py-1 bg-neutral-800 text-amber-300 rounded-xl text-[10px] font-bold border border-amber-500/30">
+                        📸 معاينة السكرين
+                      </button>
+                    )}
+                    <span className={`text-[10px] px-2.5 py-0.5 rounded-lg font-black ${b.status === 'confirmed' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                      {b.status === 'confirmed' ? 'مؤكد ✅' : 'قيد المراجعة ⏳'}
+                    </span>
+                    {b.status !== 'confirmed' && (
+                      <button type="button" onClick={() => {
+                        setBookings(bookings.map(x => x.id === b.id ? { ...x, status: 'confirmed' } : x));
+                        db.collection('bookings').doc(b.id).update({ status: 'confirmed' });
+                        playNotificationSound('cash');
+                        alert(`تم تأكيد حجز (${b.customerName}) بنجاح!`);
+                      }} className="px-2.5 py-1 bg-emerald-500 text-black font-black rounded-xl text-[10px]">
+                        تأكيد الحجز
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* تقويم أرشيف الإيرادات والتقفيل اليومي بالتاريخ لضمان عدم ضياع أي قرش */}
+          <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3 shadow-xl">
+            <div className="flex flex-wrap justify-between items-center border-b border-neutral-800 pb-2 gap-2">
+              <h3 className="font-bold text-white text-sm">📅 أرشيف الحسابات واليوميات التاريخية (حسب التاريخ):</h3>
+              <input 
+                type="date" 
+                value={selectedArchiveDate} 
+                onChange={e => setSelectedArchiveDate(e.target.value)} 
+                className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-1.5 text-white font-mono text-xs" 
+              />
+            </div>
+            <div className="p-4 bg-neutral-950 rounded-2xl border border-neutral-800 text-[11px] grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+              <div><span className="text-neutral-400 block">كاش الصالة المباشر:</span><strong className="text-emerald-400 font-mono text-sm">{completedSales.filter(s => s.date === selectedArchiveDate).reduce((sum, s) => sum + (s.totalCost || 0), 0)} ج</strong></div>
+              <div><span className="text-neutral-400 block">إيرادات الأونلاين:</span><strong className="text-blue-400 font-mono text-sm">{bookings.filter(b => b.date === selectedArchiveDate && b.status === 'confirmed').reduce((sum, b) => sum + (b.totalCost || 0), 0)} ج</strong></div>
+              <div><span className="text-neutral-400 block">المصاريف والخوارج:</span><strong className="text-rose-400 font-mono text-sm">{expenses.filter(e => e.date === selectedArchiveDate).reduce((sum, e) => sum + Number(e.amount || 0), 0)} ج</strong></div>
+              <div><span className="text-amber-300 block font-bold">صافي كاش الدرج للتاريخ:</span><strong className="text-amber-400 font-mono text-sm font-black">{completedSales.filter(s => s.date === selectedArchiveDate).reduce((sum, s) => sum + (s.totalCost || 0), 0) - expenses.filter(e => e.date === selectedArchiveDate).reduce((sum, e) => sum + Number(e.amount || 0), 0)} ج</strong></div>
+            </div>
+          </div>
+
+          {/* نافذة تسجيل زبون صالة مباشر (Walk-in) */}
+          {showWalkInModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const devId = e.target.wDev.value;
+                const dev = devices.find(d => d.id === devId);
+                if (!dev) return alert("اختر جهازاً متاحاً!");
+
+                const newSes = {
+                  id: `ses-${Date.now()}`,
+                  deviceId: dev.id,
+                  devName: dev.name,
+                  devType: dev.type,
+                  customerName: e.target.wName.value.trim() || 'زبون صالة',
+                  mode: e.target.wMode.value,
+                  controllers: e.target.wControllers.value.trim() || 'C1, C2',
+                  startTime: new Date().toISOString(),
+                  snacksCost: 0,
+                  shiftId: adminShift,
+                  source: 'in_store'
+                };
+
+                setSessions([newSes, ...sessions]);
+                setDevices(devices.map(d => d.id === dev.id ? { ...d, status: 'busy' } : d));
+                setShowWalkInModal(false);
+                playNotificationSound('cash');
+              }} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-3 shadow-2xl text-xs">
+                <div className="flex justify-between items-center border-b border-neutral-800 pb-2">
+                  <h3 className="font-bold text-white">تسجيل زبون صالة مباشر (Walk-in)</h3>
+                  <button type="button" onClick={() => setShowWalkInModal(false)} className="text-neutral-400 hover:text-white font-bold">✕</button>
+                </div>
+                <input required name="wName" placeholder="اسم الزبون" defaultValue="زبون صالة" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" />
+                <select required name="wDev" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white font-bold">
+                  <option value="">-- اختر شاشة متاحة للتشغيل --</option>
+                  {devices.filter(d => d.status === 'available').map(d => (
+                    <option key={d.id} value={d.id}>{d.name} ({d.type} VIP)</option>
+                  ))}
+                </select>
+                <div className="grid grid-cols-2 gap-2">
+                  <select name="wMode" className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-amber-300 font-bold">
+                    <option value="single">فردي (ذراعين)</option>
+                    <option value="multi">ملتي (4 ذراعات)</option>
+                  </select>
+                  <input name="wControllers" placeholder="أكواد الدراعات" defaultValue="C1, C2" className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-cyan-300 font-mono font-bold" />
+                </div>
+                <button type="submit" className="w-full py-3 bg-amber-500 text-black font-black rounded-xl shadow-lg">
+                  بدء تشغيل الشاشة فوراً 🎮
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* نافذة إنشاء حساب زائر يدوي مع رفع صورته الشخصية */}
+          {showCreateCustomerModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                const cName = e.target.cName.value.trim();
+                const cPhone = e.target.cPhone.value.trim();
+                const cPass =e.target.cPass.value.trim() || '123456';
+                const cBalance = Number(e.target.cBalance.value || 0);
+                const file = e.target.cAvatar.files[0];
+                let avatarUrl = null;
+                if (file) avatarUrl = await compressImageFile(file);
+
+                if (!validateEgyptianPhone(cPhone)) return alert("اكتب رقم هاتف مصري صحيح (11 رقماً).");
+
+                const newC = {
+                  name: cName || 'لاعب صالة',
+                  phone: cPhone,
+                  password: cPass,
+                  avatarUrl: avatarUrl,
+                  walletBalance: cBalance,
+                  xp: 100,
+                  hoursPlayed: 0,
+                  rewards: [],
+                  status: 'active', // مفعل فوراً بواسطة الأدمن
+                  myReferralCode: `TX-${cPhone.slice(-4)}`
+                };
+
+                db.collection('customers').doc(cPhone).set(newC).then(() => {
+                  setShowCreateCustomerModal(false);
+                  playNotificationSound('cash');
+                  alert(`تم إنشاء وتفعيل حساب العميل (${cName}) بنجاح! يمكنه الدخول فوراً برقم هاتفه وباسورده.`);
+                });
+              }} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-3 shadow-2xl text-xs">
+                <div className="flex justify-between items-center border-b border-neutral-800 pb-2">
+                  <h3 className="font-bold text-white">👤 تفعيل حساب زائر صالة جديد</h3>
+                  <button type="button" onClick={() => setShowCreateCustomerModal(false)} className="text-neutral-400 hover:text-white font-bold">✕</button>
+                </div>
+                <input required name="cName" placeholder="الاسم واسم الأب" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" />
+                <input required type="tel" name="cPhone" placeholder="رقم الهاتف (01xxxxxxxxx)" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white font-mono text-left" />
+                <input required name="cPass" placeholder="الرقم السري للعميل" defaultValue="123456" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" />
+                <input type="number" min={0} defaultValue={0} name="cBalance" placeholder="رصيد افتتاحي بالمحفظة (ج)" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white font-mono text-center" />
+                <div>
+                  <label className="text-[10px] text-neutral-400 block mb-1">رفع الصورة الشخصية للعميل (أفاتار اختياري):</label>
+                  <input type="file" name="cAvatar" accept="image/*" className="w-full text-neutral-400 bg-neutral-950 p-1 rounded-xl border border-neutral-800 text-[10px] file:py-0.5 file:px-2 file:rounded file:border-0 file:bg-neutral-800 file:text-amber-400" />
+                </div>
+                <button type="submit" className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-xl shadow">حفظ وتفعيل الحساب سحابياً</button>
+              </form>
+            </div>
+          )}
+
+          {/* تقرير الوردية لمشاركته على واتساب المالك */}
+          {showShiftReport && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+              <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-3.5 shadow-2xl text-xs text-center">
+                <div className="flex justify-between items-center border-b border-neutral-800 pb-2">
+                  <h3 className="font-bold text-white">📊 ملخص تقفيل وردية ({adminShift})</h3>
+                  <button type="button" onClick={() => setShowShiftReport(false)} className="text-neutral-400 hover:text-white font-bold">✕</button>
+                </div>
+                <div className="p-3.5 bg-neutral-950 rounded-2xl border border-neutral-800 text-right space-y-1 text-[11px] leading-relaxed">
+                  <div>🏢 الصالة: <strong>{config.loungeName} ({config.cityLocation})</strong></div>
+                  <div>📅 التاريخ: <strong>{todayStr}</strong> | الشِفت: <strong>{adminShift}</strong></div>
+                  <div>💵 كاش الصالة المحصل: <strong className="text-emerald-400">{inStoreRevenue} ج.م</strong></div>
+                  <div>🌐 إيرادات الأونلاين: <strong className="text-blue-400">{onlineRevenue} ج.م</strong></div>
+                  <div>📉 المصاريف والخوارج: <strong className="text-rose-400">-{totalExpenses} ج.م</strong></div>
+                  <div className="border-t border-neutral-800 pt-1 font-bold text-amber-400">
+                    صافي كاش الدرج الفعلي: {netDrawerCash} ج.م
+                  </div>
+                </div>
+                <a 
+                  href={`https://wa.me/${config.whatsappNumber}?text=${encodeURIComponent(
+                    `📊 تقرير وردية صالة ${config.loungeName} (${adminShift} - ${todayStr}):\n• كاش الصالة المحصل: ${inStoreRevenue} ج\n• إيرادات الأونلاين: ${onlineRevenue} ج\n• المصاريف: ${totalExpenses} ج\n• صافي كاش الدرج المطلوب: ${netDrawerCash} ج.م`
+                  )}`} 
+                  target="_blank" 
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl flex items-center justify-center gap-1.5 shadow">
+                  📲 إرسال التقرير لواتساب المالك
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* الفاتورة الحرارية المخصصة للطابعات 80mm */}
+          {printableReceipt && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
+              <div className="bg-white text-black rounded-3xl p-6 max-w-xs w-full space-y-3 shadow-2xl text-xs">
+                <div id="printable-receipt" className="space-y-2 text-center border-b pb-3 text-black">
+                  <h2 className="font-black text-lg">{config.loungeName}</h2>
+                  <p className="text-[10px] text-neutral-600">بون حساب معتمد — ت: {config.phone}</p>
+                  <div className="text-[11px] text-right space-y-1 pt-2 border-t border-dashed">
+                    <div>الجهاز: <strong>{printableReceipt.devName}</strong></div>
+                    <div>العميل: <strong>{printableReceipt.customerName}</strong></div>
+                    <div>المدة: <strong>{printableReceipt.durationMins || 30} دقيقة</strong></div>
+                    {printableReceipt.controllersCheck && <div>حالة الدراعات: <strong>{printableReceipt.controllersCheck}</strong></div>}
+                  </div>
+                  <div className="text-base font-black pt-2 border-t border-dashed flex justify-between">
+                    <span>الإجمالي المستحق:</span>
+                    <span>{printableReceipt.totalCost} ج.م</span>
+                  </div>
+                  <p className="text-[9px] text-neutral-500 pt-1 font-mono">شكراً لزيارتكم! نتمنى لكم يوماً سعيداً 🎮</p>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button type="button" onClick={() => window.print()} className="flex-1 py-2 bg-black text-white font-bold rounded-xl text-xs">🖨️ طباعة البون</button>
+                  <button type="button" onClick={() => setPrintableReceipt(null)} className="flex-1 py-2 bg-neutral-200 text-neutral-800 font-bold rounded-xl text-xs">إغلاق</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* معاينة صورة الإيصال أو البطاقة بحجم كبير */}
+          {viewDocImage && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+              <div className="bg-neutral-900 border border-neutral-700 rounded-3xl p-5 max-w-md w-full space-y-3 text-center">
+                <div className="flex justify-between items-center border-b border-neutral-800 pb-2">
+                  <h3 className="font-bold text-white text-xs">معاينة المستند المرفوع</h3>
+                  <button type="button" onClick={() => setViewDocImage(null)} className="text-neutral-400 hover:text-white font-bold">✕</button>
+                </div>
+                <img src={viewDocImage} alt="Document" className="max-h-[65vh] mx-auto rounded-xl object-contain border border-neutral-800 shadow" />
+                <button type="button" onClick={() => setViewDocImage(null)} className="w-full py-2 bg-neutral-800 text-white rounded-xl text-xs font-bold">إغلاق</button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // تشغيل تطبيق React بالكامل
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
+
     
