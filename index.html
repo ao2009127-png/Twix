@@ -1359,8 +1359,8 @@
       } else if (paymentMethod === 'hybrid') {
         walletDeduction = Math.min(customerWallet, pendingBooking.totalCost);
         remainingCashToTransfer = Math.max(0, pendingBooking.totalCost - walletDeduction);
-          }
-      // معالجة تأكيد وإرسال الحجز
+    }
+     // معالجة تأكيد وإرسال الحجز
       const handleExecutePayment = () => {
         setErrorMsg('');
 
@@ -1661,8 +1661,8 @@
           )}
         </div>
       );
-    }
-      // ==========================================
+                    }
+    // ==========================================
     // 4. صفحة باقات التوفير الـ 8 (BundlesPage)
     // ==========================================
     function BundlesPage({ navigate, bundles, snacksMenu, setPendingBooking, currentCustomer }) {
@@ -2168,7 +2168,7 @@
           </div>
         </div>
       );
-                  }
+              }
     // ==========================================
     // 7. صفحة مسابقة توقع الماتشات (PredictionsPage)
     // ==========================================
@@ -3161,7 +3161,7 @@
           )}
         </div>
       );
-          }
+                }
     // ==========================================
     // 15. صفحة حساب العميل والمحفظة (AccountPage)
     // ==========================================
@@ -3329,7 +3329,7 @@
             </button>
           </div>
         );
-     // واجهة تسجيل الدخول أو إنشاء حساب جديد للزائر
+             // واجهة تسجيل الدخول أو إنشاء حساب جديد للزائر
       if (!currentCustomer) {
         return (
           <div className="max-w-md mx-auto py-8 space-y-5 text-xs">
@@ -3635,7 +3635,7 @@
           )}
         </div>
       );
-                      }
+                  }
     // ==========================================
     // 16. لوحة تحكم الأدمن المركزية والشفتين (AdminPage)
     // ==========================================
@@ -3940,7 +3940,7 @@
               </div>
             </div>
           )}
-      {/* الجلسات والشاشات المباشرة الحالية بالصالة */}
+          {/* الجلسات والشاشات المباشرة الحالية بالصالة */}
           <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-4 shadow-xl">
             <h3 className="font-bold text-white text-sm flex justify-between items-center border-b border-neutral-800 pb-2">
               <span>🎮 الشاشات والجلسات المباشرة الشغالة الآن ({sessions.length}):</span>
@@ -3975,7 +3975,6 @@
                         <span>طلبات كافتيريا: {s.snacksCost || 0} ج.م</span>
                       </div>
 
-                      {/* إضافة طلبات كافتيريا سريعة للجلسة مع خصم المخزون */}
                       <div className="flex gap-1.5 pt-1">
                         <button type="button" onClick={() => {
                           setSessions(sessions.map(x => x.id === s.id ? { ...x, snacksCost: (x.snacksCost || 0) + 15 } : x));
@@ -3992,7 +3991,6 @@
                         }} className="flex-1 py-1 bg-neutral-900 hover:bg-neutral-800 text-neutral-200 border border-neutral-800 rounded-lg text-[10px]">+☕ شاي (20)</button>
                       </div>
 
-                      {/* التحكم في الجلسة: إنهاء طارئ بالدقيقة، أو إنهاء بفحص الدراعات وطباعة البون */}
                       <div className="flex flex-wrap items-center justify-between gap-1.5 pt-2 border-t border-neutral-900">
                         <button type="button" onClick={() => {
                           const hourRate = (PRICING[s.devType] || PRICING.PS4)[s.mode === 'multi' ? 'multi' : 'single'].ratePerHour;
@@ -4210,7 +4208,6 @@
               </form>
             </div>
           )}
-
           {/* نافذة إنشاء حساب زائر يدوي مع رفع صورته الشخصية */}
           {showCreateCustomerModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4">
@@ -4218,7 +4215,7 @@
                 e.preventDefault();
                 const cName = e.target.cName.value.trim();
                 const cPhone = e.target.cPhone.value.trim();
-                const cPass =e.target.cPass.value.trim() || '123456';
+                const cPass = e.target.cPass.value.trim() || '123456';
                 const cBalance = Number(e.target.cBalance.value || 0);
                 const file = e.target.cAvatar.files[0];
                 let avatarUrl = null;
@@ -4235,14 +4232,14 @@
                   xp: 100,
                   hoursPlayed: 0,
                   rewards: [],
-                  status: 'active', // مفعل فوراً بواسطة الأدمن
+                  status: 'active',
                   myReferralCode: `TX-${cPhone.slice(-4)}`
                 };
 
                 db.collection('customers').doc(cPhone).set(newC).then(() => {
                   setShowCreateCustomerModal(false);
                   playNotificationSound('cash');
-                  alert(`تم إنشاء وتفعيل حساب العميل (${cName}) بنجاح! يمكنه الدخول فوراً برقم هاتفه وباسورده.`);
+                  alert(`تم إنشاء وتفعيل حساب العميل (${cName}) بنجاح!`);
                 });
               }} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-3 shadow-2xl text-xs">
                 <div className="flex justify-between items-center border-b border-neutral-800 pb-2">
@@ -4342,5 +4339,4 @@
   </script>
 </body>
 </html>
-
-    
+      
