@@ -1625,47 +1625,71 @@
       }
     };
 
+    const AI_WORKER_URL = "https://twixair.ao5533441100.workers.dev";
+
     function GamingAIAssistant() {
-      const [panelMode, setPanelMode] = useState(null); // null | 'ai' | 'guide'
+      const [panelMode, setPanelMode] = useState(null);
       const [guideTab, setGuideTab] = useState('fifa');
       const [aiQuery, setAiQuery] = useState('');
+      const [isLoading, setIsLoading] = useState(false);
       const [chatLog, setChatLog] = useState([
-        { sender: 'ai', text: 'أهلاً بك يا بطل! أنا مساعد الجيمنج الذكي في TWIX 🎮 اسألني عن أي لعبة بلايستيشن، خطط فيفا، بيس، تكن، مورتال كومبات، أو أزرار الذراع!' }
+        { sender: 'ai', text: 'أهلاً بك يا بطل! أنا مساعد الجيمنج الذكي في TWIX 🎮 اسألني عن أي لعبة بلايستيشن، خطط فيفا، بيس، تكن، مورتال كومبات، GTA، أو أزرار الذراع وبأي صيغة!' }
       ]);
+      const chatEndRef = React.useRef(null);
+
+      useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, [chatLog, isLoading]);
 
       const getSmartGamingReply = (rawQ) => {
         const q = rawQ.trim().toLowerCase();
-        const blocked = ['ادمن', 'إدارة', 'ادارة', 'رمز', 'باسورد', 'ارباح', 'أرباح', 'كاش', 'فلوس', 'شفت', 'شِفت', 'درج', 'حسابات', 'عملاء', 'تليفون', 'موبايل', 'سري', 'مصروف', 'شكك', 'مبيعات', 'مدير', 'مخزون'];
+        const blocked = ['ادمن', 'أدمن', 'إدارة', 'ادارة', 'رقم سري', 'باسورد', 'كلمة سر', 'ارباح', 'أرباح', 'ايراد', 'شفت', 'شِفت', 'الدرج', 'بيانات العملاء', 'ارقام العملاء', 'مصروف', 'شكك', 'مبيعات', 'مدير', 'مخزون'];
         if (blocked.some(w => q.includes(w))) {
-          return '🔒 عذراً! أنا مساعد ذكي مبرمج للإجابة عن ألعاب البلايستيشن والذراع فقط، وممنوع تماماً الإجابة عن أي تفاصيل إدارية أو حسابات.';
+          return '🔒 عذراً! أنا مساعد ذكي مبرمج للإجابة عن ألعاب البلايستيشن فقط، وممنوع تماماً الإجابة عن أي تفاصيل إدارية أو حسابات.';
         }
         if (q.includes('فيفا') || q.includes('fifa') || q.includes('fc')) {
-          return '⚽ في فيفا / EA FC: الشوت بـ ◯، الباص بـ ✕، العرضية بـ ▢، والثرو بـ △. شوتة R1+◯ قوية جداً من حدود المنطقة، وفي الدفاع اضغط L2 للوقفة المتوازنة مع R1 لاستدعاء زميل!';
+          return '⚽ في فيفا / EA FC: الشوت بـ ◯، الباص بـ ✕، العرضية بـ ▢، والثرو بـ △. شوتة R1+◯ قوية جداً، وفي الدفاع اضغط L2 للوقفة المتوازنة مع R1 لاستدعاء زميل!';
         }
         if (q.includes('بيس') || q.includes('pes') || q.includes('فوتبول') || q.includes('efootball')) {
-          return '⚽ في بيس / eFootball: انتبه إن الشوت بـ ▢ والعرضية بـ ◯ (عكس فيفا)! واستخدم L2 في الدفاع لغلق زاوية التمرير، وR1+▢ لشوتة مركونة.';
+          return '⚽ في بيس / eFootball: الشوت بـ ▢ والعرضية بـ ◯ (عكس فيفا)! واستخدم L2 في الدفاع لغلق زاوية التمرير، وR1+▢ لشوتة مركونة.';
         }
         if (q.includes('مورتال') || q.includes('تكن') || q.includes('قتال') || q.includes('mk') || q.includes('tekken')) {
-          return '🥊 في ألعاب القتال: ▢ و △ لليد، و ✕ و ◯ للرجل، واستخدم الأسهم (D-Pad) للكومبوهات بدل الأنالوج. في مورتال كومبات الصد بـ R2، والضربة الخارقة بـ L2+R2 لما دمك يقل!';
+          return '🥊 في ألعاب القتال: ▢ و △ لليد، و ✕ و ◯ للرجل، واستخدم الأسهم (D-Pad) للكومبوهات. في مورتال كومبات الصد بـ R2، والضربة الخارقة بـ L2+R2!';
         }
         if (q.includes('gta') || q.includes('جاتا') || q.includes('حرامي')) {
           return '🔫 في GTA V: التصويب بـ L2 والضرب بـ R2، ركوب العربية بـ △، قائمة الأسلحة بـ L1، والاختباء بـ R1.';
         }
         if (q.includes('دراع') || q.includes('ذراع') || q.includes('زرار') || q.includes('أزرار')) {
-          return '🎮 تقدر تضغط على زرار "دليل أزرار الذراع" اللي جنبي عشان تشوف شرح كل زرار (✕ ◯ ▢ △ R1 R2 L1 L2) لكل نوع لعبة بالصور والتفصيل!';
+          return '🎮 تقدر تضغط على زرار "دليل أزرار الذراع" عشان تشوف شرح كل زرار (✕ ◯ ▢ △ R1 R2 L1 L2) لكل نوع لعبة!';
         }
         if (q.includes('ps5') || q.includes('ps4') || q.includes('فرق') || q.includes('120')) {
-          return '⚡ أجهزة PS5 VIP عندنا شغالة على شاشات 4K 120Hz بسلاسة خرافية واستجابة فورية بدون أي لاج، ومع دراعات DualSense الأصلية!';
+          return '⚡ أجهزة PS5 VIP شغالة على شاشات 4K 120Hz بسلاسة خرافية واستجابة فورية بدون لاج، ومع دراعات DualSense الأصلية!';
         }
         return '🎮 أنا متخصص في ألعاب البلايستيشن (فيفا، بيس، مورتال كومبات، تكن، GTA، السباقات، وأزرار الذراع). اكتب اسم اللعبة أو الحركة اللي عايز تعرفها وهشرحهالك فوراً!';
       };
 
-      const handleAskAI = (e) => {
+      const handleAskAI = async (e) => {
         e.preventDefault();
-        if (!aiQuery.trim()) return;
-        const reply = getSmartGamingReply(aiQuery);
-        setChatLog(prev => [...prev, { sender: 'user', text: aiQuery }, { sender: 'ai', text: reply }]);
+        const userText = aiQuery.trim();
+        if (!userText || isLoading) return;
+        const currentHistory = chatLog.slice(-6);
+        setChatLog(prev => [...prev, { sender: 'user', text: userText }]);
         setAiQuery('');
+        setIsLoading(true);
+        try {
+          const res = await fetch(AI_WORKER_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: userText, history: currentHistory })
+          });
+          const data = await res.json();
+          const finalReply = (res.ok && data?.reply) ? data.reply : getSmartGamingReply(userText);
+          setChatLog(prev => [...prev, { sender: 'ai', text: finalReply }]);
+        } catch (err) {
+          setChatLog(prev => [...prev, { sender: 'ai', text: getSmartGamingReply(userText) }]);
+        } finally {
+          setIsLoading(false);
+        }
       };
 
       return (
@@ -1688,12 +1712,14 @@
                   <button type="button" onClick={() => setPanelMode(null)} className="text-neutral-400 hover:text-white font-bold">✕</button>
                 </div>
               </div>
-              <div className="h-48 overflow-y-auto space-y-2 p-2 bg-neutral-950 rounded-2xl border border-neutral-800 no-scrollbar">
-                {chatLog.map((c, i) => <div key={i} className={`p-2 rounded-xl text-[11px] leading-relaxed ${c.sender === 'ai' ? 'bg-neutral-900 text-neutral-200 border border-neutral-800' : 'bg-amber-500 text-black font-bold mr-auto'}`}>{c.text}</div>)}
+              <div className="h-56 overflow-y-auto space-y-2 p-2 bg-neutral-950 rounded-2xl border border-neutral-800 no-scrollbar">
+                {chatLog.map((c, i) => <div key={i} className={`p-2.5 rounded-xl text-[11px] leading-relaxed whitespace-pre-line ${c.sender === 'ai' ? 'bg-neutral-900 text-neutral-200 border border-neutral-800' : 'bg-amber-500 text-black font-bold mr-auto'}`}>{c.text}</div>)}
+                {isLoading && <div className="p-2 rounded-xl text-[11px] bg-neutral-900 text-amber-400 border border-neutral-800 animate-pulse">⏳ جاري تجهيز الرد...</div>}
+                <div ref={chatEndRef} />
               </div>
               <form onSubmit={handleAskAI} className="flex gap-1.5">
-                <input value={aiQuery} onChange={e => setAiQuery(e.target.value)} placeholder="اسأل عن لعبة أو خطة أو زرار..." className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-2.5 py-1.5 text-white text-[11px]" />
-                <button type="submit" className="px-3 py-1.5 bg-amber-500 text-black font-black rounded-xl">إرسال</button>
+                <input disabled={isLoading} value={aiQuery} onChange={e => setAiQuery(e.target.value)} placeholder="اسأل عن أي لعبة، خطة، أو زرار..." className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-2.5 py-1.5 text-white text-[11px]" />
+                <button disabled={isLoading} type="submit" className="px-3 py-1.5 bg-amber-500 disabled:opacity-50 text-black font-black rounded-xl">{isLoading ? '...' : 'إرسال'}</button>
               </form>
             </div>
           ) : (
@@ -1723,7 +1749,7 @@
           )}
         </div>
       );
-    }
+              }
         function ControllerGuidePage() {
       const [tab, setTab] = useState('fifa');
       return (
