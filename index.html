@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin="anonymous"></script>
+  <script>
+window.onerror = function(msg, url, line, col, err) {
+  var d = document.createElement('div');
+  d.style = "position:fixed;top:0;left:0;width:100%;background:#e11d48;color:white;padding:15px;font-size:13px;z-index:999999;font-family:monospace;direction:ltr;";
+  d.innerHTML = "<b>ERROR:</b> " + msg + "<br><b>LINE:</b> " + line + (err ? "<br>" + err.message : "");
+  document.body ? document.body.appendChild(d) : document.documentElement.appendChild(d);
+};
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/eruda"></script><script>eruda.init();</script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
