@@ -4347,6 +4347,41 @@ window.onerror = function(msg, url, line, col, err) {
     const root = ReactDOM.createRoot(document.getElementById('root'));
     root.render(<App />);
   </script>
+  <script>
+(function() {
+  var el = document.querySelector('script[type="text/babel"]');
+  if (!el) return;
+  var code = el.textContent, lines = code.split('\n');
+  var line = 1, stack = [], inStr = null, esc = false, inLineC = false, inBlockC = false;
+  for (var i = 0; i < code.length; i++) {
+    var c = code[i], n = code[i + 1];
+    if (c === '\n') { line++; inLineC = false; esc = false; continue; }
+    if (inLineC) continue;
+    if (inBlockC) { if (c === '*' && n === '/') { inBlockC = false; i++; } continue; }
+    if (inStr) {
+      if (esc) { esc = false; continue; }
+      if (c === '\\') { esc = true; continue; }
+      if (c === inStr) inStr = null;
+      continue;
+    }
+    if (c === '/' && n === '/') { inLineC = true; i++; continue; }
+    if (c === '/' && n === '*') { inBlockC = true; i++; continue; }
+    if (c === "'" || c === '"' || c === '`') { inStr = c; continue; }
+    if (c === '{') stack.push(line);
+    else if (c === '}') {
+      if (stack.length > 0) stack.pop();
+    }
+  }
+  if (stack.length > 0) {
+    var box = document.createElement('div');
+    box.style = "position:fixed;bottom:0;left:0;width:100%;max-height:40vh;overflow:auto;background:#1e3a8a;color:#fff;padding:15px;z-index:999999;font-family:monospace;font-size:12px;direction:ltr;white-space:pre-wrap;";
+    box.textContent = "UNCLOSED { AT:\n" + stack.map(function(L) {
+      return "Line " + L + ": " + (lines[L - 1] || "").trim();
+    }).join("\n");
+    document.body.appendChild(box);
+  }
+})();
+  </script>
 </body>
 </html>
       
