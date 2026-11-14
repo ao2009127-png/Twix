@@ -1666,4 +1666,341 @@ for (const d of gS.docs) await d.ref.update({ customerPhone: newPh });
 await db.collection('customers').doc(oldPh).delete();
 logSystemEvent(adminShift, 'CHANGE_CUST_PHONE', oldPh + " -> " + newPh);
 };
+  const buildSmartAdminContext = () => {
+const dailyStats = {};
+const ensure = (d) => { if (!dailyStats[d]) dailyStats[d] = { inStoreCash: 0, onlineCash: 0, walletSpent: 0, expenses: 0, visits: 0 }; };
+completedSales.forEach(s => { const d = s.date || todayStr; ensure(d); dailyStats[d].inStoreCash += Number(s.totalCost || 0); dailyStats[d].visits += 1; });
+allBookings.forEach(b => {
+if ((b.status === 'confirmed' || b.status === 'cancelled_emergency') && b.date) {
+ensure(b.date);
+dailyStats[b.date].onlineCash += Number(b.status === 'cancelled_emergency' ? (b.emergencyUsedCost || 0) : (b.remainingCashToTransfer ?? b.totalCost ?? 0));
+dailyStats[b.date].walletSpent += Number(b.walletDeduction || 0); dailyStats[b.date].visits += 1;
+}
+});
+expenses.forEach(e => { if (e.date) { ensure(e.date); dailyStats[e.date].expenses += Number(e.amount || 0); } });
+const sortedDays = Object.keys(dailyStats).sort().slice(-14);
+return {
+today: todayStr, activeShift: adminShift, pricing, happyHour: config.happyHour,
+devices: devices.map(d => ({ id: d.id, name: d.name, type: d.type, status: d.status, games: d.games || [] })),
+snacksMenu: snacksMenu.map(s => ({ id: s.id, name: s.name, price: s.price, costPrice: s.costPrice || 0, stock: s.stock })),
+dailyStats: Object.fromEntries(sortedDays.map(k => [k, dailyStats[k]])),
+offers: offers.map(o => ({ id: o.id, title: o.title, price: o.price, deviceType: o.deviceType, duration: o.duration, expiresAt: o.expiresAt })),
+pendingBookings: allBookings.filter(b => b.status === 'awaiting_admin_approval').map(b => ({ id: b.id, ref: b.ref, customerName: b.customerName, phone: b.phone, date: b.date, time: b.time, totalCost: b.totalCost })),
+recentBookings: allBookings.slice(0, 25).map(b => ({ id: b.id, ref: b.ref, customerName: b.customerName, phone: b.phone, date: b.date, time: b.time, duration: b.duration, status: b.status, totalCost: b.totalCost })),
+pendingGifts: allGifts.filter(g => g.status === 'pending_admin'),
+pendingTableRequests: inLoungeRequests.filter(r => r.status !== 'done'),
+pendingWalletRequests: walletRequests.filter(w => w.status === 'pending').map(w => ({ id: w.id, customerName: w.customerName, customerPhone: w.customerPhone, amount: w.amount })),
+unpaidDebts: debts.filter(d => !d.paid),
+tournaments: tournaments.map(t => ({ id: t.id, title: t.title, status: t.status, players: (t.players || []).length })),
+matches: matches.map(m => ({ id: m.id, teamA: m.teamA, teamB: m.teamB, status: m.status })),
+customersDirectory: allCustomers.map(c => ({ name: c.name, phone: c.phone, status: c.status, wallet: c.walletBalance || 0, prepaidHours: c.prepaidHours || 0, hours: c.hoursPlayed || 0, trustScore: c.trustScore ?? 80, birthDate: c.birthDate || '', birthVerified: !!c.birthVerified })),
+aiMemoryLessons: aiMemory.slice(0, 12).map(m => m.lesson)
+};
+};
+const confirmBookingByAdmin = async (b) => {
+const mins = Number(b.duration || 30), xpAdd = Math.round(mins * 1.5), hrsAdd = Number((mins / 60).toFixed(2)), mKey = getCairoMonthKey();
+if (!b.rewardedStats && b.phone) {
+const cRef = db.collection('customers').doc(b.phone);
+await db.runTransaction(async tx => {
+const s = await tx.get(cRef); if (!s.exists) return; const d = s.data(), nxtMXP = (d.monthKey === mKey ? Number(d.monthlyXP || 0) : 0) + xpAdd;
+tx.set(cRef, { hoursPlayed: Number(d.hoursPlayed || 0) + hrsAdd, xp: Number(d.xp || 0) + xpAdd, monthlyXP: nxtMXP, monthKey: mKey }, { merge: true });
+db.collection('public_ranks').doc(b.phone).set({ id: b.phone, name: d.name || b.customerName, monthlyXP: nxtMXP, monthKey: mKey, level: calculateInfiniteLevel((d.xp || 0) + xpAdd).level }, { merge: true });
+});
+}
+await db.collection('bookings').doc(b.id).update({ status: 'confirmed', timerStatus: 'scheduled', rewardedStats: true, confirmedByShift: adminShift });
+logSystemEvent(adminShift, 'CONFIRM_BOOKING', b.ref); playNotificationSound('cash');
+};
+const rejectBookingByAdmin = async (b) => {
+await db.collection('bookings').doc(b.id).update({ status: 'rejected' });
+if (b.phone && (Number(b.walletDeduction || 0) > 0 || Number(b.prepaidHoursDeducted || 0) > 0)) {
+const cRef = db.collection('customers').doc(b.phone);
+await db.runTransaction(async tx => {
+const s = await tx.get(cRef); if (!s.exists) return; const d = s.data();
+tx.update(cRef, { walletBalance: Number(d.walletBalance || 0) + Number(b.walletDeduction || 0), prepaidHours: Number((Number(d.prepaidHours || 0) + Number(b.prepaidHoursDeducted || 0)).toFixed(2)) });
+});
+}
+if (b.selectedSnacks && Object.values(b.selectedSnacks).some(q => q > 0)) {
+const invRef = db.collection('inventory').doc('snacks');
+await db.runTransaction(async tx => { const s = await tx.get(invRef); if (s.exists && Array.isArray(s.data().menu)) tx.set(invRef, { menu: s.data().menu.map(sn => ({ ...sn, stock: (sn.stock ?? 0) + (b.selectedSnacks[sn.id] || 0) })) }); });
+}
+logSystemEvent(adminShift, 'REJECT_BOOKING', b.ref);
+};
+const approveGiftWithSchedule = async (g, sDate, sTime, vDays = 7) => {
+if (!sDate) return alert('حدد تاريخ استلام الهدية أولاً!');
+const exp = Date.now() + Number(vDays || 7) * 86400000, gRef = db.collection('gifts').doc(g.id);
+await db.runTransaction(async tx => {
+const snap = await tx.get(gRef); if (!snap.exists || snap.data().status !== 'pending_admin') throw new Error('تمت معالجة الهدية مسبقاً!');
+tx.update(gRef, { status: 'approved_scheduled', scheduledDate: sDate, scheduledTime: sTime || '18:00', expiresAt: exp, approvedBy: adminShift, approvedAt: new Date().toISOString() });
+if (g.customerPhone && (g.rewardType === 'wallet' || g.rewardType === 'xp') && Number(g.amount || 0) > 0) {
+const cRef = db.collection('customers').doc(g.customerPhone), cs = await tx.get(cRef);
+if (cs.exists) {
+if (g.rewardType === 'wallet') tx.update(cRef, { walletBalance: Number(cs.data().walletBalance || 0) + Number(g.amount) });
+else tx.update(cRef, { xp: Number(cs.data().xp || 0) + Number(g.amount) });
+}
+}
+});
+logSystemEvent(adminShift, 'APPROVE_GIFT', g.customerPhone + " | " + g.title + " (" + sDate + ")"); playNotificationSound('cash');
+};
+    const approveCustomerAccount = async (c) => {
+if (!c || busyBtn) return; setBusyBtn(true);
+try {
+await db.collection('customers').doc(c.id || c.phone).set({ status: 'active' }, { merge: true });
+if (c.pendingReferralCode && !c.referralPaid) {
+const snap = await db.collection('customers').where('myReferralCode', '==', c.pendingReferralCode).limit(1).get();
+if (!snap.empty) {
+const refDoc = snap.docs[0], refData = refDoc.data();
+if (!refData.referralBonusAwarded) {
+await submitGiftRequest({ customerPhone: refDoc.id, customerName: refData.name, sourceType: 'referral', title: "🤝 بونص دعوة أول صديق (" + c.name + ") — 5 ج", rewardType: 'wallet', amount: 5, uniqueKey: "ref-first-" + refDoc.id });
+await submitGiftRequest({ customerPhone: c.phone, customerName: c.name, sourceType: 'referral', title: '🎁 بونص ترحيب كود الإحالة — 5 ج', rewardType: 'wallet', amount: 5, uniqueKey: "ref-join-" + c.phone });
+await db.collection('customers').doc(refDoc.id).set({ referralBonusAwarded: true }, { merge: true });
+await db.collection('customers').doc(c.phone).set({ referralPaid: true }, { merge: true });
+}
+}
+}
+logSystemEvent(adminShift, 'APPROVE_CUSTOMER', c.phone); playNotificationSound('cash');
+} finally { setBusyBtn(false); }
+};
+const settleMatchAndReward = async (m, sA, sB) => {
+if (!m || m.status !== 'open' || busyBtn) return 0; setBusyBtn(true);
+try {
+let w = 0; const pr = m.predictions || {};
+for (const ph of Object.keys(pr)) {
+if (Number(pr[ph].scoreA) === Number(sA) && Number(pr[ph].scoreB) === Number(sB)) {
+w++;
+await submitGiftRequest({ customerPhone: ph, customerName: pr[ph].customerName || ph, sourceType: 'prediction', title: "⚽ فوز توقع (" + m.teamA + " " + sA + "-" + sB + " " + m.teamB + ") — 35 ج", rewardType: 'wallet', amount: 35, uniqueKey: "pred-" + m.id + "-" + ph });
+}
+}
+await db.collection('matches').doc(m.id).update({ scoreA: sA, scoreB: sB, status: 'closed' }); playNotificationSound('cash'); return w;
+} finally { setBusyBtn(false); }
+};
+const approveWalletReq = async (w) => {
+const wRef = db.collection('wallet_requests').doc(w.id), cRef = db.collection('customers').doc(w.customerPhone);
+await db.runTransaction(async tx => {
+const ws = await tx.get(wRef); if (!ws.exists || ws.data().status !== 'pending') throw new Error('الطلب تمت معالجته بالفعل!');
+const cs = await tx.get(cRef); if (!cs.exists) throw new Error('العميل غير موجود!');
+tx.update(wRef, { status: 'approved', approvedBy: adminShift });
+tx.update(cRef, { walletBalance: Number(cs.data().walletBalance || 0) + Number(w.amount || 0) });
+});
+logSystemEvent(adminShift, 'APPROVE_WALLET', w.customerPhone + ": +" + w.amount + "ج"); playNotificationSound('cash');
+};
+const resolveTableReq = async (r, approveRefund = false) => {
+if (r.type === 'extend' && r.bookingId) { const bk = allBookings.find(x => x.id === r.bookingId); if (bk) await controlBookingTimer(bk, 'adjust', Number(r.addMins || 30), true); }
+else if (r.type === 'cafeteria_order' && Array.isArray(r.snackItems)) {
+const invRef = db.collection('inventory').doc('snacks');
+await db.runTransaction(async tx => { const s = await tx.get(invRef); if (s.exists && Array.isArray(s.data().menu)) tx.set(invRef, { menu: s.data().menu.map(sn => { const it = r.snackItems.find(x => x.id === sn.id); return it ? { ...sn, stock: Math.max(0, (sn.stock ?? 20) - it.qty) } : sn; }) }); });
+const ses = sessions.find(s => s.deviceId === r.deviceId); if (ses) await db.collection('sessions').doc(ses.id).update({ snacksCost: Number(ses.snacksCost || 0) + Number(r.snackTotal || 0) });
+} else if (r.type === 'emergency_cancel' && r.bookingId) {
+await db.collection('bookings').doc(r.bookingId).update({ status: 'cancelled_emergency', timerStatus: 'finished', emergencyUsedCost: Number(r.usedCost || 0) });
+if (approveRefund && Number(r.refundDue || 0) > 0 && r.customerPhone) {
+await db.runTransaction(async tx => { const cRef = db.collection('customers').doc(r.customerPhone), cs = await tx.get(cRef); if (cs.exists) tx.update(cRef, { walletBalance: Number(cs.data().walletBalance || 0) + Number(r.refundDue) }); });
+}
+} else if (r.type === 'tournament_join' && r.tournamentId) {
+const t = tournaments.find(x => x.id === r.tournamentId);
+if (t) {
+if (Number(r.entryFee || 0) > 0 && r.customerPhone) {
+await db.runTransaction(async tx => { const cRef = db.collection('customers').doc(r.customerPhone), cs = await tx.get(cRef); if (!cs.exists || Number(cs.data().walletBalance || 0) < Number(r.entryFee)) throw new Error('رصيد العميل غير كافٍ للبطولة!'); tx.update(cRef, { walletBalance: Number(cs.data().walletBalance) - Number(r.entryFee) }); });
+}
+await db.collection('tournaments').doc(t.id).update({ players: firebase.firestore.FieldValue.arrayUnion({ name: r.customerName, phone: r.customerPhone }) });
+}
+}
+await db.collection('in_lounge_requests').doc(r.id).update({ status: 'done' });
+logSystemEvent(adminShift, 'RESOLVE_REQ', r.detail); playNotificationSound('cash');
+};
+const controlBookingTimer = async (b, action, deltaMins = 0, addFee = false) => {
+const ti = getBookingTimerInfo(b, now), upd = {};
+if (action === 'start') { upd.timerStatus = 'running'; upd.timerAnchorMs = Date.now(); upd.remainingSecAtAnchor = Number(b.duration || 30) * 60; }
+else if (action === 'pause') { upd.timerStatus = 'paused'; upd.remainingSecOnPause = ti.remainingSec; }
+else if (action === 'resume') { upd.timerStatus = 'running'; upd.timerAnchorMs = Date.now(); upd.remainingSecAtAnchor = Number(b.remainingSecOnPause ?? ti.remainingSec); }
+else if (action === 'adjust') {
+const newDur = Math.max(15, Number(b.duration || 30) + deltaMins), newRem = Math.max(60, ti.remainingSec + deltaMins * 60);
+upd.duration = newDur; if (b.timerStatus === 'paused') upd.remainingSecOnPause = newRem; else { upd.timerStatus = 'running'; upd.timerAnchorMs = Date.now(); upd.remainingSecAtAnchor = newRem; }
+if (addFee && deltaMins > 0) { const dt = b.bookedDevices?.[0]?.type || ((b.devicesSummary || '').includes('PS5') ? 'PS5' : 'PS4'), md = b.bookedDevices?.[0]?.mode || 'single'; upd.totalCost = Number(b.totalCost || 0) + calcDevicePrice(pricing, dt, md, deltaMins); }
+} else if (action === 'finish') upd.timerStatus = 'finished';
+await db.collection('bookings').doc(b.id).update(upd); logSystemEvent(adminShift, "TIMER_" + action.toUpperCase(), b.ref); playNotificationSound('click');
+};
+    const executeAIActions = async (actions = []) => {
+const res = [];
+const findC = (p) => {
+const ph = String(p.phone || p.customerPhone || '').replace(/^\+2/, '').replace(/\s+/g, '').trim();
+return (ph && allCustomers.find(c => c.phone === ph)) || (p.customerName && allCustomers.find(c => (c.name || '').includes(p.customerName.trim()))) || null;
+};
+for (const act of actions) {
+const t = act?.type, p = act?.payload || {};
+try {
+if (t === 'UPDATE_DEVICE_PRICING' && p.deviceType && p.mode) {
+const cur = pricing[p.deviceType]?.[p.mode] || { per30: 50, perHour: 100 };
+await db.collection('site_settings').doc('pricing').set({ ...pricing, [p.deviceType]: { ...pricing[p.deviceType], [p.mode]: { per30: p.per30 ?? cur.per30, perHour: p.perHour ?? cur.perHour } } });
+res.push("✅ سعر " + p.deviceType);
+} else if (t === 'UPDATE_SNACK' || t === 'ADD_SNACK' || t === 'DELETE_SNACK') {
+let nxt = [...snacksMenu];
+if (t === 'ADD_SNACK' && p.name) nxt.push({ id: "snk-" + Date.now(), name: p.name, price: Number(p.price || 20), costPrice: Number(p.costPrice || 10), stock: Number(p.stock || 20), icon: '🍽️', hasSugarOption: !!p.hasSugarOption, available: true });
+else if (t === 'DELETE_SNACK') nxt = nxt.filter(s => s.id !== p.snackId && !s.name.includes(p.name || '---'));
+else nxt = nxt.map(s => (s.id === p.snackId || (p.name && s.name.includes(p.name))) ? { ...s, price: p.price ?? s.price, costPrice: p.costPrice ?? s.costPrice, stock: p.stock ?? s.stock, available: p.available ?? s.available } : s);
+await db.collection('inventory').doc('snacks').set({ menu: nxt }); res.push("✅ الكافتيريا");
+} else if (t === 'ADD_DEVICE' || t === 'UPDATE_DEVICE' || t === 'DELETE_DEVICE' || t === 'SET_DEVICE_GAMES') {
+if (t === 'ADD_DEVICE' && p.name) { const id = "d-" + Date.now(); await db.collection('devices').doc(id).set({ id, name: p.name, type: p.type || 'PS5', zone: p.zone || 'VIP', status: 'available', games: Array.isArray(p.games) ? p.games : [] }); }
+else {
+const dev = devices.find(d => d.id === p.deviceId || (p.name && d.name.includes(p.name)));
+if (dev) {
+if (t === 'DELETE_DEVICE') await db.collection('devices').doc(dev.id).delete();
+else if (t === 'SET_DEVICE_GAMES') await db.collection('devices').doc(dev.id).update({ games: Array.isArray(p.games) ? p.games : [] });
+else await db.collection('devices').doc(dev.id).update({ name: p.name ?? dev.name, type: p.type ?? dev.type, zone: p.zone ?? dev.zone, status: p.status ?? dev.status, games: p.games ?? dev.games });
+}
+}
+res.push("✅ الأجهزة والألعاب");
+} else if (t === 'PUBLISH_OFFER' && p.title) {
+const id = "off-" + Date.now(), hrs = p.durationHours ? Number(p.durationHours) : (p.durationDays ? Number(p.durationDays) * 24 : 0);
+await db.collection('offers').doc(id).set({ id, title: p.title, detail: p.detail || '', price: Number(p.price || 100), oldPrice: Number(p.oldPrice || 0), deviceType: p.deviceType || 'PS5', mode: p.mode || 'single', duration: Number(p.duration || 60), expiresAt: hrs > 0 ? Date.now() + hrs * 3600000 : null, date: todayStr, createdAt: new Date().toISOString() });
+if (p.sendPush && adminSecret) fetch(AI_WORKER_URL + "/send-notification", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, title: p.title, message: p.detail || p.title, url: window.location.origin + window.location.pathname + "?offer=" + id + "#booking" }) }).catch(() => {});
+res.push("✅ نشر عرض: " + p.title);
+} else if (t === 'DELETE_OFFER') {
+const tgs = p.all ? offers : offers.filter(o => o.id === p.offerId || (p.title && o.title.includes(p.title)));
+for (const tg of tgs) await db.collection('offers').doc(tg.id).delete(); res.push("✅ مسح عروض (" + tgs.length + ")");
+} else if (t === 'TOGGLE_HAPPY_HOUR') {
+await db.collection('site_settings').doc('config').set({ happyHour: { active: !!p.active, discountPercent: Number(p.discountPercent ?? config.happyHour?.discountPercent ?? 15), startHour: Number(p.startHour ?? config.happyHour?.startHour ?? 12), endHour: Number(p.endHour ?? config.happyHour?.endHour ?? 16) } }, { merge: true }); res.push("✅ Happy Hour");
+} else if (t === 'EDIT_CUSTOMER' || t === 'ADJUST_WALLET' || t === 'APPROVE_CUSTOMER') {
+const tc = findC(p);
+if (!tc) res.push("❌ العميل غير موجود");
+else if (t === 'APPROVE_CUSTOMER') { await approveCustomerAccount(tc); res.push("✅ تفعيل " + tc.name); }
+else {
+const upd = {};
+if (p.name) upd.name = p.name; if (p.password) upd.password = p.password; if (p.status) upd.status = p.status;
+if (p.trustScore !== undefined) { upd.trustScore = Number(p.trustScore); upd.trustNote = p.trustNote || ''; }
+if (p.birthVerified !== undefined) { upd.birthVerified = !!p.birthVerified; upd.birthDocPending = false; }
+if (p.walletDelta ?? p.delta ?? p.amount) upd.walletBalance = Math.max(0, Number(tc.walletBalance || 0) + Number(p.walletDelta ?? p.delta ?? p.amount));
+if (p.prepaidHoursDelta) { upd.prepaidHours = Math.max(0, Number(tc.prepaidHours || 0) + Number(p.prepaidHoursDelta)); upd.prepaidDeviceType = p.prepaidDeviceType || 'PS5'; upd.prepaidExpiresAt = Date.now() + 30 * 86400000; }
+if (p.newPhone && p.newPhone !== tc.phone) await updateCustomerPhoneAndMigrate(tc.phone, p.newPhone, upd);
+else await db.collection('customers').doc(tc.phone).set(upd, { merge: true });
+res.push("✅ تحديث العميل " + tc.name);
+}
+} else if (t === 'APPROVE_WALLET_REQUEST' || t === 'REJECT_WALLET_REQUEST') {
+const w = walletRequests.find(x => x.id === p.requestId || (x.status === 'pending' && x.customerPhone === p.customerPhone));
+if (w) { if (t === 'APPROVE_WALLET_REQUEST') await approveWalletReq(w); else await db.collection('wallet_requests').doc(w.id).update({ status: 'rejected' }); res.push("✅ طلب شحن"); }
+} else if (t === 'RESOLVE_TABLE_REQUEST') {
+const r = inLoungeRequests.find(x => x.id === p.requestId || x.status !== 'done'); if (r) { await resolveTableReq(r, true); res.push("✅ تنفيذ طلب طاولة"); }
+} else if (t === 'EDIT_BOOKING' || t === 'CONTROL_TIMER') {
+const bk = allBookings.find(b => b.id === p.bookingId || b.ref === p.ref);
+if (bk) {
+if (t === 'CONTROL_TIMER') await controlBookingTimer(bk, p.action, Number(p.deltaMins || 0), !!p.addFee);
+else if (p.status === 'confirmed') await confirmBookingByAdmin(bk);
+else if (p.status === 'rejected') await rejectBookingByAdmin(bk);
+else await db.collection('bookings').doc(bk.id).update(Object.fromEntries(Object.entries(p).filter(([k]) => ['date','time','duration','totalCost','status','incidentNote'].includes(k))));
+res.push("✅ حجز " + bk.ref);
+}
+} else if (t === 'START_SESSION') {
+const dev = devices.find(d => (d.id === p.deviceId || (p.name && d.name.includes(p.name))) && d.status === 'available') || devices.find(d => d.status === 'available');
+if (dev) {
+const sid = "ses-" + Date.now();
+await db.collection('sessions').doc(sid).set({ id: sid, deviceId: dev.id, devName: dev.name, devType: dev.type, customerName: p.customerName || 'زبون صالة', customerPhone: p.customerPhone || '', mode: p.mode || 'single', targetMins: p.targetMins || null, startTime: new Date().toISOString(), snacksCost: 0, snackItems: [], shiftId: adminShift, source: 'in_store' });
+await db.collection('devices').doc(dev.id).update({ status: 'busy' }); res.push("✅ بدء جلسة " + dev.name);
+}
+} else if (t === 'APPROVE_GIFT' || t === 'REJECT_GIFT') {
+const g = allGifts.find(x => x.id === p.giftId || x.status === 'pending_admin');
+if (g) { if (t === 'APPROVE_GIFT') await approveGiftWithSchedule(g, p.scheduledDate || todayStr, p.scheduledTime || '18:00', p.validDays || 7); else await db.collection('gifts').doc(g.id).update({ status: 'rejected' }); res.push("✅ الهدية"); }
+} else if (t === 'ADD_EXPENSE' && p.title) { const id = "exp-" + Date.now(); await db.collection('expenses').doc(id).set({ id, title: p.title, amount: Number(p.amount || 0), shiftId: adminShift, date: todayStr, createdAt: new Date().toISOString() }); res.push("✅ مصروف"); }
+else if (t === 'ADD_DEBT' && p.customerName) { const id = "dbt-" + Date.now(); await db.collection('debts').doc(id).set({ id, customerName: p.customerName, amount: Number(p.amount || 0), note: p.note || '', paid: false, shiftId: adminShift, date: todayStr, createdAt: new Date().toISOString() }); res.push("✅ شكك"); }
+else if (t === 'SETTLE_DEBT') { const d = debts.find(x => x.id === p.debtId || (!x.paid && x.customerName.includes(p.customerName || '---'))); if (d) { await db.collection('debts').doc(d.id).update({ paid: true, paidDate: todayStr }); await db.collection('sales').doc("dp-" + Date.now()).set({ id: "dp-" + Date.now(), devName: 'سداد شكك', customerName: d.customerName, totalCost: Number(d.amount), source: 'in_store', shiftId: adminShift, date: todayStr, createdAt: new Date().toISOString() }); res.push("✅ سداد شكك"); } }
+else if (t === 'ADD_MATCH' && p.teamA) { const id = "m-" + Date.now(); await db.collection('matches').doc(id).set({ id, teamA: p.teamA, teamB: p.teamB || 'الخصم', time: p.time || '9:00 م', status: 'open', scoreA: 0, scoreB: 0, predictions: {}, createdAt: new Date().toISOString() }); res.push("✅ ماتش"); }
+else if (t === 'SETTLE_MATCH') { const tm = matches.find(x => x.id === p.matchId || x.status === 'open'); if (tm) { await settleMatchAndReward(tm, Number(p.scoreA || 0), Number(p.scoreB || 0)); res.push("✅ اعتماد ماتش"); } }
+else if (t === 'CREATE_TOURNAMENT' && p.title) { const id = "tr-" + Date.now(); await db.collection('tournaments').doc(id).set({ id, title: p.title, game: p.game || 'EA FC 25', entryFee: Number(p.entryFee || 50), prizeText: p.prizeText || '500ج', maxPlayers: Number(p.maxPlayers || 16), players: [], status: 'open', createdAt: new Date().toISOString() }); res.push("✅ بطولة"); }
+else if (t === 'DELETE_REVIEW' && p.id) { await db.collection('reviews').doc(p.id).delete(); res.push("✅ حذف تقييم"); }
+else if (t === 'DELETE_MEMORY' && p.id) { await db.collection('memories').doc(p.id).delete(); res.push("✅ حذف صورة"); }
+else if (t === 'DELETE_CHALLENGE' && p.id) { await db.collection('challenges').doc(p.id).delete(); res.push("✅ حذف تحدي"); }
+else if (t === 'ADD_HALL_RECORD' && p.title) { const id = "hof-" + Date.now(); await db.collection('hall_of_fame').doc(id).set({ id, title: p.title, holder: p.holder || 'بطل', score: p.score || '10', game: p.game || 'PS5' }); res.push("✅ رقم قياسي"); }
+else if (t === 'UPDATE_CONFIG') { await db.collection('site_settings').doc('config').set({ ...config, ...Object.fromEntries(Object.entries(p).filter(([k]) => ['loungeName','phone','openingHours','partyTax'].includes(k))) }); res.push("✅ الإعدادات"); }
+else if (t === 'LEARN_MEMORY' && p.lesson) { const id = "mem-" + Date.now(); await db.collection('ai_memory').doc(id).set({ id, lesson: p.lesson, createdAt: new Date().toISOString() }); res.push("✅ حفظ قاعدة"); }
+logSystemEvent('AI المدير', t, JSON.stringify(p).slice(0, 100));
+} catch (err) { res.push("❌ " + t + ": " + (err?.message || 'خطأ')); }
+}
+return res;
+};
+    useEffect(() => {
+if (!adminShift || !aiPilotMode || !adminSecret) return;
+const checkMod = async (col, list, getTxt, getImg) => {
+for (const item of list.filter(x => !x.moderated).slice(0, 2)) {
+if (modRef.current[item.id]) continue; modRef.current[item.id] = true;
+try {
+const r = await fetch(AI_WORKER_URL + "/moderate", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, itemType: col, text: getTxt(item), imageBase64: getImg ? getImg(item) : null }) });
+const d = await r.json();
+if (d?.safe === false) { await db.collection(col).doc(item.id).delete(); logSystemEvent('AI الرقيب', "DEL_" + col, d.reason || 'مخالف'); }
+else if (d?.safe === true) await db.collection(col).doc(item.id).update({ moderated: true });
+else modRef.current[item.id] = false;
+} catch { modRef.current[item.id] = false; }
+}
+};
+const checkPendingAccounts = async () => {
+for (const c of allCustomers.filter(x => x.status === 'pending_approval' && !x.aiChecked).slice(0, 2)) {
+if (modRef.current["acc_" + c.phone]) continue; modRef.current["acc_" + c.phone] = true;
+try {
+const r = await fetch(AI_WORKER_URL + "/moderate", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, itemType: 'account_check', text: c.name, birthDate: c.birthDate || '', imageBase64: c.idCardImage || null }) });
+const d = await r.json();
+if (d?.safe) {
+await db.collection('customers').doc(c.phone).set({ status: 'active', aiChecked: true, birthVerified: !!(c.birthDate && c.idCardImage && d.idClear && d.birthMatches), birthDocPending: !!(c.birthDate && c.idCardImage && !(d.idClear && d.birthMatches)), aiAccountNote: d.reason || 'تم الفحص بالـ AI' }, { merge: true });
+logSystemEvent('AI الحسابات', 'AUTO_APPROVE_ACCOUNT', c.phone);
+} else await db.collection('customers').doc(c.phone).set({ aiChecked: true, aiAccountNote: d?.reason || 'يحتاج مراجعة المدير' }, { merge: true });
+} catch { modRef.current["acc_" + c.phone] = false; }
+}
+};
+checkMod('memories', memories, m => m.caption, m => m.image);
+checkMod('reviews', reviews, r => r.author + ": " + r.comment);
+checkMod('challenges', challenges, c => c.playerName + " - " + c.stake);
+checkPendingAccounts();
+}, [adminShift, aiPilotMode, adminSecret, memories, reviews, challenges, allCustomers]);
+const runTrustScoreAI = async (c) => {
+if (!adminSecret) return alert('أدخل ADMIN_AI_SECRET أولاً!');
+const bks = allBookings.filter(b => b.phone === c.phone);
+const stats = { confirmed: bks.filter(b => b.status === 'confirmed').length, rejected: bks.filter(b => b.status === 'rejected').length, emergencyCancels: bks.filter(b => b.status === 'cancelled_emergency').length, onTheWayCount: bks.filter(b => !!b.onTheWayEta).length, incidents: (c.incidents || []).length };
+const res = await fetch(AI_WORKER_URL + "/trust-score", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, customerStats: stats }) });
+const d = await res.json();
+if (res.ok && d.score !== undefined) { await db.collection('customers').doc(c.phone).set({ trustScore: Number(d.score), trustLabel: d.label || 'جيد', trustNote: d.note || '' }, { merge: true }); playNotificationSound('cash'); alert("✓ تقييم الالتزام: " + d.score + "/100 (" + d.label + ")\n" + (d.note || '')); }
+};
+const runWinBackAI = async () => {
+if (!adminSecret) return alert('أدخل ADMIN_AI_SECRET أولاً!');
+const cutoff = Date.now() - 14 * 86400000;
+const inactive = allCustomers.filter(c => c.status === 'active').filter(c => { const lastBk = allBookings.find(b => b.phone === c.phone); const t = lastBk ? new Date(lastBk.createdAt).getTime() : new Date(c.createdAt || 0).getTime(); return t < cutoff; }).slice(0, 8).map(c => ({ phone: c.phone, name: c.name, hoursPlayed: c.hoursPlayed || 0 }));
+if (!inactive.length) return alert('كل عملائك نشطين خلال آخر 14 يوم!');
+const res = await fetch(AI_WORKER_URL + "/win-back", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, inactiveCustomers: inactive }) });
+const d = await res.json();
+if (Array.isArray(d?.messages)) setWinBackMsgs(d.messages);
+};
+const analyzeManagerStyle = async (force = false) => {
+if (!adminSecret || learningBusy) return;
+const logs = adminLogs.filter(l => l.actor === 'shift_1' || l.actor === 'shift_2').slice(0, 20);
+if (logs.length < 3) { if (force) alert('اعمل كام حركة الأول عشان الـ AI يدرس أسلوبك!'); return; }
+setLearningBusy(true);
+try {
+const res = await fetch(AI_WORKER_URL + "/learn-style", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, recentActions: logs.map(l => l.actionType + ": " + l.detail), existingLessons: aiMemory.map(m => m.lesson) }) });
+const d = await res.json();
+if (Array.isArray(d?.lessons) && d.lessons.length) {
+for (const ls of d.lessons.slice(0, 3)) { const id = "mem-" + Date.now() + "-" + Math.random().toString(36).slice(2, 4); await db.collection('ai_memory').doc(id).set({ id, lesson: ls, autoLearned: true, createdAt: new Date().toISOString() }); }
+if (force) { playNotificationSound('cash'); alert("✓ استنتج " + d.lessons.length + " قواعد جديدة!"); }
+} else if (force) alert('أسلوبك متسجل بالفعل.');
+} finally { setLearningBusy(false); }
+};
+const handleAdminAuth = async (e) => {
+e.preventDefault();
+const isS1 = await verifyStoredHash(inputPin, shiftHashes.shift_1), isS2 = await verifyStoredHash(inputPin, shiftHashes.shift_2), isM = await verifyStoredHash(inputPin, shiftHashes.master);
+if (isS1 || isS2 || isM) {
+if (!String(shiftHashes.shift_1).startsWith('sha256:') && isS1) db.collection('site_settings').doc('admin_security').set({ shift_1: await sha256Hex(inputPin) }, { merge: true });
+setAdminShift(isS2 ? 'shift_2' : 'shift_1'); setPinError(false); setInputPin(''); playNotificationSound('cash');
+} else { setPinError(true); setInputPin(''); playNotificationSound('alert'); }
+};
+const curSales = completedSales.filter(s => (s.shiftId || 'shift_1') === adminShift && s.date === todayStr), curExp = expenses.filter(e => (e.shiftId || 'shift_1') === adminShift && e.date === todayStr), curDebts = debts.filter(d => (d.shiftId || 'shift_1') === adminShift);
+const inStoreRev = curSales.reduce((a, s) => a + Number(s.totalCost || 0), 0);
+const onlineRev = allBookings.filter(b => (b.status === 'confirmed' || b.status === 'cancelled_emergency') && b.date === todayStr).reduce((a, b) => a + Number(b.status === 'cancelled_emergency' ? (b.emergencyUsedCost || 0) : (b.remainingCashToTransfer ?? b.totalCost ?? 0)), 0);
+const walletSpentToday = allBookings.filter(b => b.status === 'confirmed' && b.date === todayStr).reduce((a, b) => a + Number(b.walletDeduction || 0), 0);
+const totExp = curExp.reduce((a, e) => a + Number(e.amount || 0), 0), totUnpaidDebts = curDebts.filter(d => !d.paid).reduce((a, d) => a + Number(d.amount || 0), 0), netCash = inStoreRev - totExp;
+const hrCounts = {}, drinkCounts = {}; let snackRev = 0, snackCostTot = 0;
+allBookings.filter(b => b.status === 'confirmed').forEach(b => { const h = (b.time || '').split(':')[0]; if (h) hrCounts[h] = (hrCounts[h] || 0) + 1; });
+completedSales.forEach(s => (s.snackItems || []).forEach(it => { drinkCounts[it.name] = (drinkCounts[it.name] || 0) + 1; snackRev += Number(it.price || 0); const m = snacksMenu.find(x => x.id === it.id); snackCostTot += Number(m?.costPrice || Math.round((it.price || 0) * 0.5)); }));
+const peakHr = Object.entries(hrCounts).sort((a, b) => b[1] - a[1])[0]?.[0], topDrink = Object.entries(drinkCounts).sort((a, b) => b[1] - a[1])[0]?.[0], lowStock = snacksMenu.filter(s => (s.stock ?? 20) <= 3);
+const pendingBirthdays = allCustomers.filter(c => c.birthDate && c.idCardImage && !c.birthVerified), pendingGifts = allGifts.filter(g => g.status === 'pending_admin');
+if (!adminShift) return (
+<div className="max-w-sm mx-auto py-16 px-4 space-y-4 text-xs text-center">
+<div className="w-16 h-16 bg-amber-500/10 border-2 border-amber-500/40 rounded-3xl flex items-center justify-center mx-auto text-3xl">🔒</div>
+<h1 className="text-xl font-black text-white">لوحة تحكم إدارة {config.loungeName}</h1>
+{pinError && <div className="p-2.5 bg-rose-500/10 border border-rose-500/40 text-rose-300 rounded-xl font-bold">⚠️ الرمز غير صحيح!</div>}
+<form onSubmit={handleAdminAuth} className="space-y-3"><input type="password" inputMode="numeric" autoFocus value={inputPin} onChange={e => setInputPin(e.target.value)} placeholder="••••" className="w-full bg-neutral-900 border border-neutral-800 rounded-2xl py-3 text-center text-3xl tracking-widest text-white font-mono" /><button className="w-full py-3 bg-amber-500 text-black font-black rounded-xl text-sm">دخول الشِفت ➔</button></form>
+</div>
+);
     
