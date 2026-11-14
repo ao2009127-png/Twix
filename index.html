@@ -313,8 +313,34 @@
       const [currentCustomer, setCurrentCustomer] = useState(() => safeJSONParse('twix_customer', null));
       const [myBookings, setMyBookings] = useState([]);
       const [pendingBooking, setPendingBooking] = useState(() => safeJSONParse('twix_pending_booking', null, sessionStorage));
-      const [selectedOffer, setSelectedOffer] = useState(null);
-      const [aiBookingDraft, setAiBookingDraft] = useState(null);
+      const [selectedOffer, setSelectedOffer] = useState(() => safeJSONParse('twix_selected_offer', null, sessionStorage));
+   const [aiBookingDraft, setAiBookingDraft] = useState(() => safeJSONParse('twix_ai_draft', null, sessionStorage));
+   const [custSettings, setCustSettings] = useState(() => safeJSONParse('twix_cust_settings', { lang: 'ar', theme: 'dark', fontSize: 'normal', reduceMotion: false, soundEnabled: true, alertMinutes: 10, prefDevice: 'PS5', prefMode: 'single', prefGame: '', prefSugar: 'medium', useNickname: false, nickname: '' }));
+   useEffect(() => { if (selectedOffer) sessionStorage.setItem('twix_selected_offer', JSON.stringify(selectedOffer)); else sessionStorage.removeItem('twix_selected_offer'); }, [selectedOffer]);
+   useEffect(() => { if (aiBookingDraft) sessionStorage.setItem('twix_ai_draft', JSON.stringify(aiBookingDraft)); else sessionStorage.removeItem('twix_ai_draft'); }, [aiBookingDraft]);
+   useEffect(() => {
+     localStorage.setItem('twix_cust_settings', JSON.stringify(custSettings));
+     document.documentElement.dir = custSettings.lang === 'en' ? 'ltr' : 'rtl';
+     document.documentElement.lang = custSettings.lang === 'en' ? 'en' : 'ar';
+   }, [custSettings]);
+   useEffect(() => {
+     const onHash = () => { const h = (window.location.hash || '').replace('#', ''); if (VALID_PAGES.includes(h) && h !== 'admin') setPage(h); };
+     window.addEventListener('hashchange', onHash); return () => window.removeEventListener('hashchange', onHash);
+   }, []);
+   useEffect(() => {
+     if (!offers.length) return;
+     const params = new URLSearchParams(window.location.search);
+     const offerId = params.get('offer'), targetPage = params.get('page');
+     if (offerId) {
+       const found = offers.find(o => o.id === offerId && (!o.expiresAt || Number(o.expiresAt) > Date.now()));
+       if (found) { setSelectedOffer(found); setPage('booking'); window.location.hash = '#booking'; }
+       else { alert('عفواً، هذا العرض انتهى وقته.'); setPage('home'); }
+       window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+     } else if (targetPage && VALID_PAGES.includes(targetPage) && targetPage !== 'admin') {
+       setPage(targetPage); window.location.hash = '#' + targetPage;
+       window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+     }
+   }, [offers]);
       const alertRef = useRef({});
 
       useEffect(() => {
