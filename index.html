@@ -581,126 +581,63 @@ setOnTheWayTarget(null); playNotificationSound('cash'); alert('✓ تم إرسا
 );
   }
   function HomePage({ navigate, config, pricing, devices, snacksMenu, loungeCapacityStatus, busyCount, totalDevices, challenges, offers, now, setSelectedOffer, lang }) {
-const currentBoss = challenges.find(c => c.isBoss) || { playerName: "شاغر للتحدي 👑", game: "EA Sports FC / FIFA", score: 0, rewardText: "خصم على الفاتورة لمن يهزم الزعيم بموافقة الإدارة" };
+const currentBoss = challenges.find(c => c.isBoss) || { playerName: "شاغر للتحدي 👑", game: "EA Sports FC / FIFA", score: 0, rewardText: "خصم بموافقة الإدارة لمن يهزم الزعيم" };
 const activeOffers = (offers || []).filter(o => !o.expiresAt || Number(o.expiresAt) > now);
 const hhOn = isHappyHourAt(config);
 return (
 <div className="space-y-6 py-2 text-xs">
-{hhOn && (
-<div className="bg-gradient-to-r from-emerald-500/20 via-neutral-900 to-cyan-500/20 border-2 border-emerald-500/60 p-4 rounded-3xl flex flex-wrap justify-between items-center gap-2">
-<div><strong className="text-emerald-300 text-sm block">⏰ Happy Hour شغال دلوقتي! خصم {config.happyHour.discountPercent}%</strong><span className="text-[11px] text-neutral-300">متاح يومياً من الساعة {config.happyHour.startHour}:00 إلى {config.happyHour.endHour}:00</span></div>
-<button onClick={() => { setSelectedOffer(null); navigate('booking'); }} className="px-4 py-2 bg-emerald-500 text-black font-black rounded-xl">احجز بخصم Happy Hour ➔</button>
-</div>
-)}
+{hhOn && <div className="bg-gradient-to-r from-emerald-500/20 via-neutral-900 to-cyan-500/20 border-2 border-emerald-500/60 p-4 rounded-3xl flex flex-wrap justify-between items-center gap-2"><div><strong className="text-emerald-300 text-sm block">⏰ Happy Hour شغال دلوقتي! خصم {config.happyHour.discountPercent}%</strong><span className="text-[11px] text-neutral-300">من {config.happyHour.startHour}:00 إلى {config.happyHour.endHour}:00</span></div><button onClick={() => { setSelectedOffer(null); navigate('booking'); }} className="px-4 py-2 bg-emerald-500 text-black font-black rounded-xl">احجز بالخصم ➔</button></div>}
 {activeOffers.length > 0 && (
 <div className="bg-gradient-to-r from-amber-500/25 via-neutral-900 to-amber-500/20 border-2 border-amber-500/60 p-4 rounded-3xl space-y-2 shadow-2xl">
 <div className="flex items-center justify-between"><span className="bg-amber-500 text-black font-black px-3 py-0.5 rounded-full text-[10px] animate-pulse">🔥 عروض الصالة الحصرية الآن</span><span className="text-[10px] text-amber-300 font-mono font-bold">محدث سحابياً ⚡</span></div>
 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-{activeOffers.map(off => {
-const cd = formatOfferCountdown(off.expiresAt, now);
-return (
+{activeOffers.map(off => { const cd = formatOfferCountdown(off.expiresAt, now); return (
 <div key={off.id} className="bg-neutral-950/90 border border-amber-500/30 p-3.5 rounded-2xl flex flex-col justify-between gap-2">
-<div className="flex justify-between items-start gap-2">
-<div><strong className="text-white text-xs block font-black">{off.title}</strong><p className="text-neutral-300 text-[11px] mt-0.5">{off.detail}</p><span className="text-[10px] text-cyan-300 font-bold block mt-1">🎮 {off.deviceType || 'PS5'} ({off.mode === 'multi' ? 'ملتي' : 'فردي'}) — {off.duration || 60} دقيقة</span></div>
-<div className="text-left">{off.oldPrice > 0 && <span className="text-[10px] text-neutral-500 line-through font-mono block">{off.oldPrice} ج</span>}<span className="text-amber-400 font-black text-base font-mono">{off.price || 0} ج</span></div>
-</div>
-<div className="flex items-center justify-between gap-2 pt-1 border-t border-neutral-800">{cd && !cd.expired ? <span className="text-[10px] font-mono font-black text-rose-300 bg-rose-500/15 border border-rose-500/30 px-2 py-1 rounded-lg">⏳ {cd.text}</span> : <span className="text-[10px] text-emerald-400 font-bold">⚡ متاح الآن</span>}<button onClick={() => { setSelectedOffer(off); navigate('booking'); }} className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-xl text-[10px] whitespace-nowrap">احجز بالعرض ➔</button></div>
-</div>
-);
-})}
+<div className="flex justify-between items-start gap-2"><div><strong className="text-white text-xs block font-black">{off.title}</strong><p className="text-neutral-300 text-[11px] mt-0.5">{off.detail}</p><span className="text-[10px] text-cyan-300 font-bold block mt-1">🎮 {off.deviceType || 'PS5'} ({off.mode === 'multi' ? 'ملتي' : 'فردي'}) — {off.duration || 60} دقيقة</span></div><div className="text-left">{off.oldPrice > 0 && <span className="text-[10px] text-neutral-500 line-through font-mono block">{off.oldPrice} ج</span>}<span className="text-amber-400 font-black text-base font-mono">{off.price || 0} ج</span></div></div>
+<div className="flex items-center justify-between gap-2 pt-1 border-t border-neutral-800">{cd && !cd.expired ? <span className="text-[10px] font-mono font-black text-rose-300 bg-rose-500/15 border border-rose-500/30 px-2 py-1 rounded-lg">⏳ {cd.text}</span> : <span className="text-[10px] text-emerald-400 font-bold">⚡ متاح الآن</span>}<button onClick={() => { setSelectedOffer(off); navigate('booking'); }} className="px-3 py-1.5 bg-amber-500 text-black font-black rounded-xl text-[10px]">احجز بالعرض ➔</button></div>
+</div>); })}
 </div>
 </div>
 )}
 <div className={"p-4 rounded-3xl flex flex-col sm:flex-row items-center justify-between border gap-3 " + (loungeCapacityStatus === 'green' ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300' : (loungeCapacityStatus === 'yellow' ? 'bg-amber-500/10 border-amber-500/40 text-amber-300' : 'bg-rose-500/10 border-rose-500/40 text-rose-300'))}>
-<div className="flex items-center gap-3"><span className="text-2xl">{loungeCapacityStatus === 'green' ? '🟢' : (loungeCapacityStatus === 'yellow' ? '🟡' : '🔥')}</span><div><strong className="text-sm block text-white">{loungeCapacityStatus === 'green' ? tr('الصالة رايقة والأجهزة جاهزة للتشغيل الفوري!', 'Lounge is free & ready!', lang) : (loungeCapacityStatus === 'yellow' ? tr('إقبال متوسط، نصف الشاشات مشغولة الآن.', 'Half of screens are busy right now.', lang) : tr('الصالة مشتعلة بالكامل! احجز دورك لتأمين شاشتك.', 'Full House! Book your slot now.', lang))}</strong><span className="text-[11px] text-neutral-400">شاشات 65 بوصة 4K 120Hz VIP وأذرع أصلية في {config.cityLocation}.</span></div></div>
+<div className="flex items-center gap-3"><span className="text-2xl">{loungeCapacityStatus === 'green' ? '🟢' : (loungeCapacityStatus === 'yellow' ? '🟡' : '🔥')}</span><div><strong className="text-sm block text-white">{loungeCapacityStatus === 'green' ? tr('الصالة رايقة والأجهزة جاهزة للتشغيل الفوري!', 'Lounge is free & ready!', lang) : (loungeCapacityStatus === 'yellow' ? tr('إقبال متوسط، نصف الشاشات مشغولة الآن.', 'Half of screens are busy.', lang) : tr('الصالة مشتعلة بالكامل! احجز دورك لتأمين شاشتك.', 'Full House! Book now.', lang))}</strong><span className="text-[11px] text-neutral-400">شاشات 65 بوصة 4K 120Hz VIP في {config.cityLocation}.</span></div></div>
 <span className="font-mono text-xs font-black px-3.5 py-1.5 bg-black/60 rounded-xl border border-neutral-800 text-white">{busyCount} / {totalDevices} أجهزة مشغولة</span>
 </div>
-<div className="relative bg-gradient-to-b from-neutral-900 to-neutral-950 p-6 sm:p-10 rounded-3xl border border-neutral-800 space-y-5 shadow-2xl">
-<div className="flex flex-wrap items-center justify-between gap-2"><span className="bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs px-3.5 py-1 rounded-full font-black">🔥 تجربة الجيمنج الفاخرة الأولى في مدينة الشروق</span><span className="text-[11px] text-neutral-400 font-bold bg-neutral-900 px-3 py-1 rounded-xl border border-neutral-800">⏰ {config.openingHours}</span></div>
-<h1 className="text-2xl sm:text-4xl md:text-5xl font-black text-white leading-tight">{tr('عش متعة التحدي الحقيقي في', 'Experience True Gaming in', lang)} <span className="text-amber-400 block mt-2">{config.loungeName}</span></h1>
-<p className="text-neutral-400 text-xs sm:text-sm max-w-2xl leading-relaxed">أجهزة PS5 VIP وشاشات 120Hz بدون لاج، باقات توفيرية، باقات ساعات شهرية، بطولات وتحديات، ومساعد ذكي متكامل.</p>
-<div className="flex flex-wrap gap-2.5 pt-2">
-<button onClick={() => { setSelectedOffer(null); navigate('booking'); }} className="bg-amber-500 hover:bg-amber-400 text-black font-black px-6 py-3.5 rounded-2xl text-xs sm:text-sm shadow-lg">🎮 {tr('احجز شاشتك وطلباتك الآن', 'Book Screen & Drinks Now', lang)}</button>
-<button onClick={() => navigate('bundles')} className="bg-neutral-800 hover:bg-neutral-700 text-amber-300 font-bold px-5 py-3.5 rounded-2xl text-xs sm:text-sm border border-amber-500/30">🎁 باقات التوفير الـ 8</button>
-<button onClick={() => navigate('challenges')} className="bg-neutral-900 hover:bg-neutral-800 text-cyan-400 font-bold px-5 py-3.5 rounded-2xl text-xs sm:text-sm border border-cyan-500/30">⚔️ التحديات والبطولات</button>
-<button onClick={() => navigate('parties')} className="bg-neutral-900 hover:bg-neutral-800 text-pink-400 font-bold px-5 py-3.5 rounded-2xl text-xs sm:text-sm border border-pink-500/30">🎉 حجز حفلة الصالة (+{config.partyTax || 200}ج)</button>
+<div className="bg-gradient-to-b from-neutral-900 to-neutral-950 p-6 sm:p-10 rounded-3xl border border-neutral-800 space-y-5 shadow-2xl">
+<div className="flex flex-wrap items-center justify-between gap-2"><span className="bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs px-3.5 py-1 rounded-full font-black">🔥 تجربة الجيمنج الفاخرة في الشروق</span><span className="text-[11px] text-neutral-400 font-bold bg-neutral-900 px-3 py-1 rounded-xl border border-neutral-800">⏰ {config.openingHours}</span></div>
+<h1 className="text-2xl sm:text-4xl font-black text-white leading-tight">{tr('عش متعة التحدي الحقيقي في', 'Experience True Gaming in', lang)} <span className="text-amber-400 block mt-2">{config.loungeName}</span></h1>
+<div className="flex flex-wrap gap-2.5 pt-2"><button onClick={() => { setSelectedOffer(null); navigate('booking'); }} className="bg-amber-500 text-black font-black px-6 py-3 rounded-2xl text-xs sm:text-sm">🎮 {tr('احجز شاشتك وطلباتك الآن', 'Book Screen Now', lang)}</button><button onClick={() => navigate('bundles')} className="bg-neutral-800 text-amber-300 font-bold px-5 py-3 rounded-2xl border border-amber-500/30">🎁 باقات التوفير الـ 8</button><button onClick={() => navigate('challenges')} className="bg-neutral-900 text-cyan-400 font-bold px-5 py-3 rounded-2xl border border-cyan-500/30">⚔️ التحديات والبطولات</button><button onClick={() => navigate('parties')} className="bg-neutral-900 text-pink-400 font-bold px-5 py-3 rounded-2xl border border-pink-500/30">🎉 حفلة الصالة (+{config.partyTax || 200}ج)</button></div>
 </div>
-</div>
-<div className="bg-gradient-to-r from-amber-500/20 via-neutral-900 to-amber-500/10 border-2 border-amber-500/40 p-5 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl">
-<div className="flex items-center gap-4 text-center md:text-right"><div className="w-14 h-14 bg-amber-500 text-black rounded-2xl flex items-center justify-center text-3xl font-black">👑</div><div><span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-black">زعيم الصالة الحالي</span><h3 className="text-lg font-black text-white mt-0.5">{currentBoss.playerName} — <span className="text-amber-400 font-bold">{currentBoss.game}</span></h3><span className="text-xs text-neutral-400 block">سلسلة الانتصارات: 🔥 <strong className="text-amber-400">{currentBoss.score || currentBoss.streak || 0} فوز</strong></span></div></div>
-<div className="text-center md:text-left space-y-1.5"><span className="text-[11px] text-amber-300 block font-bold">🎁 {currentBoss.rewardText || 'تحدي الزعيم الآن'}</span><button onClick={() => navigate('challenges')} className="bg-amber-500 text-black font-black px-4 py-2 rounded-xl text-xs">⚔️ تحدي الزعيم الآن</button></div>
+<div className="bg-gradient-to-r from-amber-500/20 via-neutral-900 to-amber-500/10 border-2 border-amber-500/40 p-5 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4">
+<div className="flex items-center gap-4"><div className="w-14 h-14 bg-amber-500 text-black rounded-2xl flex items-center justify-center text-3xl font-black">👑</div><div><span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-black">زعيم الصالة الحالي</span><h3 className="text-lg font-black text-white mt-0.5">{currentBoss.playerName} — <span className="text-amber-400">{currentBoss.game}</span></h3><span className="text-xs text-neutral-400">سلسلة الانتصارات: 🔥 <strong className="text-amber-400">{currentBoss.score || currentBoss.streak || 0} فوز</strong></span></div></div>
+<button onClick={() => navigate('challenges')} className="bg-amber-500 text-black font-black px-4 py-2 rounded-xl text-xs">⚔️ تحدي الزعيم الآن</button>
 </div>
 <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3">
-<h3 className="text-sm font-black text-amber-400">🏷️ قائمة أسعار الصالة والكافتيريا</h3>
-<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
-<div className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 flex justify-between"><div><strong className="text-white block">PlayStation 5 VIP</strong><span className="text-neutral-400">فردي: {pricing.PS5?.single?.perHour || 100}ج/س | ملتي: {pricing.PS5?.multi?.perHour || 120}ج/س</span></div><span className="font-mono text-amber-400 font-black">من {pricing.PS5?.single?.per30 || 50}ج</span></div>
-<div className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 flex justify-between"><div><strong className="text-white block">PlayStation 4 Pro</strong><span className="text-neutral-400">فردي: {pricing.PS4?.single?.perHour || 70}ج/س | ملتي: {pricing.PS4?.multi?.perHour || 90}ج/س</span></div><span className="font-mono text-cyan-400 font-black">من {pricing.PS4?.single?.per30 || 35}ج</span></div>
-</div>
-{devices.some(d => Array.isArray(d.games) && d.games.length > 0) && (
-<div className="pt-2 border-t border-neutral-800 space-y-2"><strong className="text-cyan-300 block">🎮 الألعاب المتاحة على الأجهزة:</strong><div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{devices.filter(d => Array.isArray(d.games) && d.games.length > 0).map(d => <div key={d.id} className="p-2.5 bg-neutral-950 rounded-xl border border-neutral-800"><strong className="text-white text-[11px] block mb-1">{d.name}:</strong><div className="flex flex-wrap gap-1">{d.games.map((g, i) => <span key={i} className="px-2 py-0.5 bg-neutral-900 border border-cyan-500/30 text-cyan-200 rounded-lg text-[10px]">{g}</span>)}</div></div>)}</div></div>
-)}
+<h3 className="text-sm font-black text-amber-400">🏷️ الأسعار والألعاب المتاحة والكافتيريا</h3>
+<div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]"><div className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 flex justify-between"><div><strong className="text-white block">PlayStation 5 VIP</strong><span className="text-neutral-400">فردي: {pricing.PS5?.single?.perHour || 100}ج/س | ملتي: {pricing.PS5?.multi?.perHour || 120}ج/س</span></div><span className="font-mono text-amber-400 font-black">من {pricing.PS5?.single?.per30 || 50}ج</span></div><div className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 flex justify-between"><div><strong className="text-white block">PlayStation 4 Pro</strong><span className="text-neutral-400">فردي: {pricing.PS4?.single?.perHour || 70}ج/س | ملتي: {pricing.PS4?.multi?.perHour || 90}ج/س</span></div><span className="font-mono text-cyan-400 font-black">من {pricing.PS4?.single?.per30 || 35}ج</span></div></div>
+{devices.some(d => Array.isArray(d.games) && d.games.length > 0) && <div className="pt-2 border-t border-neutral-800 space-y-2"><strong className="text-cyan-300 block">🎮 الألعاب المتاحة على الأجهزة:</strong><div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{devices.filter(d => Array.isArray(d.games) && d.games.length > 0).map(d => <div key={d.id} className="p-2.5 bg-neutral-950 rounded-xl border border-neutral-800"><strong className="text-white text-[11px] block mb-1">{d.name}:</strong><div className="flex flex-wrap gap-1">{d.games.map((g, i) => <span key={i} className="px-2 py-0.5 bg-neutral-900 border border-cyan-500/30 text-cyan-200 rounded-lg text-[10px]">{g}</span>)}</div></div>)}</div></div>}
 <div className="flex flex-wrap gap-1.5">{snacksMenu.filter(s => s.available !== false).map(sn => <span key={sn.id} className="px-2.5 py-1 bg-neutral-950 border border-neutral-800 rounded-xl text-[10px] text-neutral-300">{sn.icon} {sn.name}: <strong className="text-amber-400 font-mono">{sn.price}ج</strong></span>)}</div>
 </div>
-<div className="bg-gradient-to-r from-emerald-500/10 via-neutral-900 to-cyan-500/10 border border-emerald-500/30 p-5 rounded-3xl space-y-3">
-<div className="flex justify-between items-center"><h3 className="text-sm font-black text-emerald-400">🛡️ إزاي بنحافظ على أمان وخصوصية بياناتك؟</h3><button onClick={() => navigate('guide')} className="text-[11px] text-amber-300 font-bold underline">التفاصيل ➔</button></div>
-<div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px] text-neutral-300">
-<div className="p-3 bg-neutral-950/80 rounded-2xl border border-neutral-800"><strong className="text-white block mb-1">🔒 سرية رقمك وإيصالاتك:</strong>بياناتك وصور التحويل مشفرة ومعزولة للإدارة فقط.</div>
-<div className="p-3 bg-neutral-950/80 rounded-2xl border border-neutral-800"><strong className="text-white block mb-1">👤 عزل الحسابات:</strong>محفظتك وحجوزاتك خاصة بيك ولا نشاركها مع أي طرف ثالث.</div>
-<div className="p-3 bg-neutral-950/80 rounded-2xl border border-neutral-800"><strong className="text-white block mb-1">💬 سرية جروب الشلة:</strong>محادثاتكم محمية بكود سري بينكم فقط.</div>
-</div>
-</div>
+<div className="bg-gradient-to-r from-emerald-500/10 via-neutral-900 to-cyan-500/10 border border-emerald-500/30 p-5 rounded-3xl space-y-2"><div className="flex justify-between"><h3 className="text-sm font-black text-emerald-400">🛡️ أمان وخصوصية بياناتك</h3><button onClick={() => navigate('guide')} className="text-[11px] text-amber-300 font-bold underline">التفاصيل ➔</button></div><div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px] text-neutral-300"><div className="p-3 bg-neutral-950/80 rounded-2xl border border-neutral-800">🔒 سرية رقمك وإيصالاتك وصورة بطاقتك للإدارة فقط.</div><div className="p-3 bg-neutral-950/80 rounded-2xl border border-neutral-800">👤 عزل الحسابات والمحافظ تماماً.</div><div className="p-3 bg-neutral-950/80 rounded-2xl border border-neutral-800">💬 سرية محادثات جروب الشلة بكود سري.</div></div></div>
 </div>
 );
 }
 function HallOfFamePage({ hallRecords }) {
-return (
-<div className="max-w-3xl mx-auto py-6 space-y-6 text-xs">
-<div className="text-center space-y-1"><span className="text-[10px] bg-amber-500/20 text-amber-300 px-3 py-1 rounded-full font-black">أرشيف أساطير الصالة</span><h1 className="text-2xl font-black text-white">🌟 لوحة الأرقام القياسية (Hall of Fame)</h1></div>
-{hallRecords.length === 0 ? <div className="p-8 bg-neutral-900 border border-neutral-800 rounded-3xl text-center space-y-2"><span className="text-4xl block">🏆</span><strong className="text-white block">لا توجد أرقام قياسية مسجلة بعد!</strong></div> : (
-<div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">{hallRecords.map(r => (<div key={r.id} className="p-4 bg-neutral-900 border border-neutral-800 rounded-3xl space-y-2 text-center"><span className="text-3xl block">🏆</span><strong className="text-white block">{r.title}</strong><span className="text-amber-400 font-mono text-sm font-black block">{r.score}</span><span className="text-[10px] text-neutral-300 block">اللاعب: {r.holder}</span><span className="text-[9px] bg-neutral-950 px-2 py-0.5 rounded text-neutral-500 font-mono inline-block">{r.game}</span></div>))}</div>
-)}
-</div>
-);
+return (<div className="max-w-3xl mx-auto py-6 space-y-6 text-xs"><h1 className="text-2xl font-black text-white text-center">🌟 لوحة الأرقام القياسية</h1>{hallRecords.length === 0 ? <div className="p-8 bg-neutral-900 border border-neutral-800 rounded-3xl text-center">لا توجد أرقام قياسية مسجلة بعد!</div> : <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">{hallRecords.map(r => <div key={r.id} className="p-4 bg-neutral-900 border border-neutral-800 rounded-3xl space-y-1 text-center"><span className="text-3xl block">🏆</span><strong className="text-white block">{r.title}</strong><span className="text-amber-400 font-mono font-black block">{r.score}</span><span className="text-[10px] text-neutral-300 block">{r.holder}</span></div>)}</div>}</div>);
 }
 function MemoriesPage({ memories, currentCustomer }) {
 const [caption, setCaption] = useState(''); const [photo, setPhoto] = useState(null); const [busy, setBusy] = useState(false);
 const handleShareMemory = (e) => {
-e.preventDefault(); if (busy) return; if (!photo) return alert('اختر صورة تذكارية أولاً!'); if (hasLocalProfanity(caption)) return alert('⚠️ ممنوع استخدام ألفاظ غير لائقة!');
+e.preventDefault(); if (busy) return; if (!photo) return alert('اختر صورة تذكارية!'); if (hasLocalProfanity(caption)) return alert('⚠️ ألفاظ غير لائقة!');
 setBusy(true);
-const item = { id: "mem-" + Date.now(), author: currentCustomer?.name || 'لاعب بالصالة', authorPhone: currentCustomer?.phone || '', verified: !!currentCustomer, caption: caption.trim() || 'لحظة حماسية في TWIX 🎮', image: photo, moderated: false, date: getCairoDateStr(), createdAt: new Date().toISOString() };
-db.collection('memories').doc(item.id).set(item).then(() => { setCaption(''); setPhoto(null); setBusy(false); playNotificationSound('cash'); alert('تم نشر الذكرى في أرشيف الصالة بنجاح!'); }).catch(() => { setBusy(false); alert('حدث خطأ أثناء النشر.'); });
+const item = { id: "mem-" + Date.now(), author: currentCustomer?.name || 'لاعب بالصالة', authorPhone: currentCustomer?.phone || '', verified: !!currentCustomer, caption: caption.trim() || 'لحظة في TWIX 🎮', image: photo, moderated: false, date: getCairoDateStr(), createdAt: new Date().toISOString() };
+db.collection('memories').doc(item.id).set(item).then(() => { setCaption(''); setPhoto(null); setBusy(false); playNotificationSound('cash'); alert('تم النشر بنجاح!'); }).catch(() => setBusy(false));
 };
-return (
-<div className="max-w-3xl mx-auto py-6 space-y-6 text-xs">
-<div className="text-center space-y-1"><h1 className="text-2xl font-black text-white">📸 نادي الذكريات وأرشيف الصالة</h1><p className="text-neutral-400">مراقب بالذكاء الاصطناعي لحذف أي صور أو كلمات غير لائقة تلقائياً 🛡️</p></div>
-<form onSubmit={handleShareMemory} className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3">
-<input value={caption} onChange={e => setCaption(e.target.value)} placeholder="اكتب تعليقاً..." className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" />
-<FilePickerButton onPick={setPhoto} label={photo ? '🔄 تغيير الصورة التذكارية' : '📸 اختيار صورة تذكارية'} />
-{photo && <div className="relative w-fit mx-auto"><img src={photo} alt="Preview" className="max-h-40 rounded-xl border border-amber-500/40" /><button type="button" onClick={() => setPhoto(null)} className="absolute -top-2 -right-2 bg-rose-600 text-white rounded-full w-6 h-6 text-xs font-black">✕</button></div>}
-<button disabled={busy} type="submit" className="w-full py-2.5 bg-amber-500 text-black font-black rounded-xl">{busy ? 'جاري النشر...' : 'نشر في أرشيف الصالة 📸'}</button>
-</form>
-{memories.length === 0 ? <p className="text-center text-neutral-500 py-8 bg-neutral-900 rounded-3xl border border-neutral-800">لا توجد صور منشورة بعد.</p> : (
-<div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{memories.map(m => (<div key={m.id} className="bg-neutral-900 border border-neutral-800 rounded-3xl overflow-hidden"><img src={m.image} alt="Memory" className="w-full h-52 object-cover" /><div className="p-3 space-y-1"><strong className="text-amber-400 block">{m.author} {m.verified && <span className="text-emerald-400 text-[10px]">✓</span>}</strong><p className="text-neutral-200">{m.caption}</p><span className="text-[10px] text-neutral-500 font-mono">{m.date}</span></div></div>))}</div>
-)}
-</div>
-);
+return (<div className="max-w-3xl mx-auto py-6 space-y-5 text-xs"><h1 className="text-2xl font-black text-white text-center">📸 نادي الذكريات وأرشيف الصالة</h1><form onSubmit={handleShareMemory} className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3"><input value={caption} onChange={e => setCaption(e.target.value)} placeholder="اكتب تعليقاً..." className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><FilePickerButton onPick={setPhoto} label={photo ? '🔄 تغيير الصورة' : '📸 اختيار صورة'} />{photo && <img src={photo} className="max-h-36 mx-auto rounded-xl" />}<button disabled={busy} className="w-full py-2.5 bg-amber-500 text-black font-black rounded-xl">{busy ? 'جاري النشر...' : 'نشر 📸'}</button></form><div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{memories.map(m => <div key={m.id} className="bg-neutral-900 border border-neutral-800 rounded-3xl overflow-hidden"><img src={m.image} className="w-full h-52 object-cover" /><div className="p-3"><strong className="text-amber-400 block">{m.author}</strong><p className="text-neutral-200">{m.caption}</p></div></div>)}</div></div>);
 }
 function GuidePage({ config }) {
-return (
-<div className="max-w-4xl mx-auto py-6 space-y-6 text-xs">
-<div className="text-center space-y-2 border-b border-neutral-800 pb-4"><h1 className="text-2xl sm:text-3xl font-black text-white">دليل تويكس الشامل، حماية بياناتك، والشروط 🌟</h1></div>
-<div className="bg-neutral-900 border border-emerald-500/40 p-6 rounded-3xl space-y-3">
-<h2 className="text-base font-black text-emerald-400 border-b border-neutral-800 pb-2">🛡️ أولاً: كيف نحافظ على أمان وخصوصية بياناتك؟</h2>
-<div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[11px] text-neutral-300">
-<div className="p-3.5 bg-neutral-950 rounded-2xl border border-neutral-800"><strong className="text-white block mb-1">1. سرية الحساب والمستندات:</strong>رقم هاتفك وإيصالات التحويل وصورة البطاقة محفوظة للإدارة فقط.</div>
-<div className="p-3.5 bg-neutral-950 rounded-2xl border border-neutral-800"><strong className="text-white block mb-1">2. عدم مشاركة البيانات:</strong>لا نبيع أو نشارك بياناتك مع أي جهة خارجية.</div>
-<div className="p-3.5 bg-neutral-950 rounded-2xl border border-neutral-800"><strong className="text-white block mb-1">3. سرية جروب الشلة:</strong>محادثاتكم محمية بكود سري بينكم فقط.</div>
-<div className="p-3.5 bg-neutral-950 rounded-2xl border border-neutral-800"><strong className="text-white block mb-1">4. موافقة المدير والأمان المالي:</strong>جميع الحجوزات والهدايا والحفلات تتم مراجعتها واعتمادها سحابياً.</div>
-</div>
-</div>
-<div className="bg-neutral-900 border border-neutral-800 p-6 rounded-3xl space-y-3"><h2 className="text-base font-black text-amber-400 border-b border-neutral-800 pb-2">📜 ثانياً: اللوائح والشروط المعتمدة</h2><p className="whitespace-pre-line bg-neutral-950 p-4 rounded-2xl border border-neutral-800 leading-loose text-neutral-300 text-[11px]">{config.termsText}</p></div>
-<div className="bg-black border-2 border-amber-500 p-5 rounded-3xl text-center"><h3 className="text-amber-500 font-black text-lg">{config.closingSlogan || "احجز معنا وأنت مطمئن 🎮"}</h3><span className="text-[11px] text-neutral-400 block mt-1">© 2026 {config.loungeName}</span></div>
-</div>
-);
-}
+return (<div className="max-w-4xl mx-auto py-6 space-y-5 text-xs"><h1 className="text-2xl font-black text-white text-center">دليل تويكس الشامل والشروط 🌟</h1><div className="bg-neutral-900 border border-emerald-500/40 p-5 rounded-3xl space-y-2"><h2 className="text-base font-black text-emerald-400">🛡️ حماية وأمان بياناتك:</h2><p className="text-neutral-300">بياناتك وصور التحويل والبطاقة سرية للإدارة فقط، وجميع الحجوزات والهدايا والحفلات تخضع لمراجعة وموافقة المدير.</p></div><div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-2"><h2 className="text-base font-black text-amber-400">📜 اللوائح والشروط:</h2><p className="whitespace-pre-line bg-neutral-950 p-4 rounded-2xl border border-neutral-800 leading-loose text-neutral-300 text-[11px]">{config.termsText}</p></div><div className="bg-black border-2 border-amber-500 p-4 rounded-3xl text-center"><h3 className="text-amber-500 font-black text-lg">{config.closingSlogan || "احجز معنا وأنت مطمئن 🎮"}</h3></div></div>);
+  }
   
+
+
