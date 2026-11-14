@@ -509,6 +509,7 @@
             {page === 'squad_hub' && <SquadHubPage currentCustomer={currentCustomer} snacksMenu={snacksMenu} />}
             {page === 'memories' && <MemoriesPage memories={memories} currentCustomer={currentCustomer} />}
             {page === 'in_lounge' && <InLoungePage devices={devices} snacksMenu={snacksMenu} currentCustomer={currentCustomer} />}
+            {page === 'settings' && <SettingsPage custSettings={custSettings} setCustSettings={setCustSettings} currentCustomer={currentCustomer} setCurrentCustomer={setCurrentCustomer} config={config} navigate={navigate} />}
             {page === 'hall_of_fame' && <HallOfFamePage hallRecords={hallRecords} />}
             {page === 'guide' && <GuidePage config={config} />}
             {page === 'reviews' && <ReviewsPage reviews={reviews} currentCustomer={currentCustomer} />}
