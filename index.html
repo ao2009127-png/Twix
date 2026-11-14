@@ -2084,7 +2084,7 @@
                 const exp = val > 0 ? Date.now() + val * (unit === 'days' ? 86400000 : 3600000) : null;
                 const id = `off-${Date.now()}`;
                 await db.collection('offers').doc(id).set({ id, title: t, detail: d, price: pr, oldPrice: opr, deviceType: f.oDev.value, mode: f.oMode.value, duration: Number(f.oMins.value || 60), expiresAt: exp, date: todayStr, createdAt: new Date().toISOString() });
-                if (adminSecret) fetch(`${AI_WORKER_URL}/send-notification`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, title: `🔥 ${t} (${pr}ج)`, message: d }) }).catch(() => {});
+                if (adminSecret) fetch(`${AI_WORKER_URL}/send-notification`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, title: `🔥 ${t} (${pr}ج)`, message: d, url: `${window.location.origin}${window.location.pathname}?offer=${id}#booking` }) }).catch(() => {});
                 logSystemEvent(adminShift, 'NEW_OFFER', `${t} (${pr}ج)`); setShowNewOffer(false); playNotificationSound('cash'); alert('✓ تم نشر العرض بالعد التنازلي وإرسال الإشعار!');
               }} className="bg-neutral-900 border border-purple-500/40 rounded-3xl p-5 max-w-sm w-full space-y-2.5">
                 <div className="flex justify-between"><h3 className="font-bold text-white">📢 نشر عرض بسعر وعد تنازلي</h3><button type="button" onClick={() => setShowNewOffer(false)}>✕</button></div>
