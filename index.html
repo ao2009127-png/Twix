@@ -2387,6 +2387,88 @@ const [learningBusy, setLearningBusy] = useState(false);
         </div>
       );
     }
+    function SettingsPage({ custSettings, setCustSettings, currentCustomer, setCurrentCustomer, config, navigate }) {
+      const isEn = custSettings.lang === 'en';
+      const [newPass, setNewPass] = useState(''); const [confPass, setConfPass] = useState('');
+      const [busy, setBusy] = useState(false);
+      const upd = (k, v) => setCustSettings(p => ({ ...p, [k]: v }));
+      const saveNewPassword = async (e) => {
+        e.preventDefault(); if (!currentCustomer || busy) return;
+        if (newPass.trim().length < 4) return alert(isEn ? 'Password must be at least 4 characters.' : 'الرقم السري لا يقل عن 4 حروف أو أرقام.');
+        if (newPass.trim() !== confPass.trim()) return alert(isEn ? 'Passwords do not match!' : 'الرقم السري غير متطابق في الخانتين!');
+        setBusy(true);
+        try {
+          await db.collection('customers').doc(currentCustomer.phone).set({ password: newPass.trim() }, { merge: true });
+          setCurrentCustomer(p => ({ ...p, password: newPass.trim() }));
+          setNewPass(''); setConfPass(''); playNotificationSound('cash');
+          alert(isEn ? 'Password updated!' : '✓ تم تغيير الرقم السري بنجاح!');
+        } finally { setBusy(false); }
+      };
+      const saveNewAvatar = async (b64) => {
+        if (!currentCustomer) return;
+        await db.collection('customers').doc(currentCustomer.phone).set({ avatarUrl: b64 }, { merge: true });
+        setCurrentCustomer(p => ({ ...p, avatarUrl: b64 }));
+        playNotificationSound('cash'); alert(isEn ? 'Photo updated!' : '✓ تم تحديث صورتك الشخصية!');
+      };
+      return (
+        <div className="max-w-2xl mx-auto py-6 space-y-5 text-xs">
+          <div className="flex justify-between items-center bg-neutral-900 p-4 rounded-3xl border border-neutral-800">
+            <div><h1 className="text-xl font-black text-white">{isEn ? '⚙️ App & Account Settings' : '⚙️ إعدادات التطبيق والحساب'}</h1><span className="text-[11px] text-neutral-400">{config.loungeName}</span></div>
+            <button onClick={() => window.location.reload()} className="px-3.5 py-2 bg-amber-500 text-black font-black rounded-xl">🔄 {isEn ? 'Reload App' : 'تحديث التطبيق'}</button>
+          </div>
+          <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-4">
+            <strong className="text-amber-400 block text-sm">🌐 {isEn ? 'Language & Display' : 'اللغة والمظهر'}</strong>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => upd('lang', 'ar')} className={`p-2.5 rounded-xl font-black border ${custSettings.lang !== 'en' ? 'bg-amber-500 text-black border-amber-500' : 'bg-neutral-950 border-neutral-800 text-neutral-300'}`}>🇪🇬 العربية (RTL)</button>
+              <button onClick={() => upd('lang', 'en')} className={`p-2.5 rounded-xl font-black border ${custSettings.lang === 'en' ? 'bg-amber-500 text-black border-amber-500' : 'bg-neutral-950 border-neutral-800 text-neutral-300'}`}>🇬🇧 English (LTR)</button>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {[['dark', isEn ? 'Gold Dark' : 'داكن ذهبي'],['midnight', isEn ? 'Midnight' : 'أزرق ليلي'],['oled', isEn ? 'Pure Black' : 'أسود نقي']].map(([id, lbl]) => (
+                <button key={id} onClick={() => upd('theme', id)} className={`p-2 rounded-xl border font-bold ${custSettings.theme === id ? 'bg-amber-500 text-black border-amber-500' : 'bg-neutral-950 border-neutral-800 text-neutral-300'}`}>{lbl}</button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => upd('fontSize', custSettings.fontSize === 'large' ? 'normal' : 'large')} className="p-2.5 bg-neutral-950 border border-neutral-800 rounded-xl font-bold text-white">{isEn ? 'Font Size:' : 'حجم الخط:'} <span className="text-amber-400">{custSettings.fontSize === 'large' ? (isEn ? 'Large' : 'كبير') : (isEn ? 'Normal' : 'عادي')}</span></button>
+              <button onClick={() => upd('soundEnabled', custSettings.soundEnabled === false ? true : false)} className="p-2.5 bg-neutral-950 border border-neutral-800 rounded-xl font-bold text-white">{isEn ? 'App Sounds:' : 'أصوات التطبيق:'} <span className={custSettings.soundEnabled === false ? 'text-rose-400' : 'text-emerald-400'}>{custSettings.soundEnabled === false ? (isEn ? 'Muted' : 'مكتوم 🔇') : (isEn ? 'On' : 'شغال 🔊')}</span></button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 items-center">
+              <span className="text-neutral-300 font-bold">⏰ {isEn ? 'Session Alert Before:' : 'تنبيه قبل انتهاء الوقت بـ:'}</span>
+              <select value={custSettings.alertMinutes || 10} onChange={e => upd('alertMinutes', Number(e.target.value))} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-amber-400 font-bold"><option value={5}>5 {isEn ? 'mins' : 'دقائق'}</option><option value={10}>10 {isEn ? 'mins' : 'دقائق'}</option><option value={15}>15 {isEn ? 'mins' : 'دقيقة'}</option></select>
+            </div>
+          </div>
+          <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3">
+            <strong className="text-cyan-400 block text-sm">🎮 {isEn ? 'Gaming Preferences' : 'تفضيلات اللعب والحجز'}</strong>
+            <div className="grid grid-cols-2 gap-2">
+              <select value={custSettings.prefDevice || 'PS5'} onChange={e => upd('prefDevice', e.target.value)} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white font-bold"><option value="PS5">PS5 VIP</option><option value="PS4">PS4 Pro</option></select>
+              <select value={custSettings.prefMode || 'single'} onChange={e => upd('prefMode', e.target.value)} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-amber-300 font-bold"><option value="single">{isEn ? 'Single' : 'فردي'}</option><option value="multi">{isEn ? 'Multi' : 'ملتي'}</option></select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input value={custSettings.prefGame || ''} onChange={e => upd('prefGame', e.target.value)} placeholder={isEn ? 'Favorite Game' : 'لعبتك المفضلة (مثال: FIFA)'} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white" />
+              <select value={custSettings.prefSugar || 'medium'} onChange={e => upd('prefSugar', e.target.value)} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-amber-200">{SUGAR_OPTIONS.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}</select>
+            </div>
+          </div>
+          {currentCustomer ? (
+            <div className="bg-neutral-900 border border-amber-500/30 p-5 rounded-3xl space-y-4">
+              <strong className="text-amber-400 block text-sm">👤 {isEn ? 'Account Photo & Password' : 'تغيير الصورة والرقم السري للحساب'}</strong>
+              <div className="flex items-center gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-neutral-950 border border-amber-500/40 overflow-hidden flex items-center justify-center text-2xl">{currentCustomer.avatarUrl ? <img src={currentCustomer.avatarUrl} className="w-full h-full object-cover" /> : '👤'}</div>
+                <div className="flex-1"><FilePickerButton onPick={saveNewAvatar} label={isEn ? '🖼️ Change Profile Picture' : '🖼️ تغيير الصورة الشخصية للحساب'} /></div>
+              </div>
+              <form onSubmit={saveNewPassword} className="space-y-2 pt-2 border-t border-neutral-800">
+                <span className="text-neutral-300 font-bold block">🔑 {isEn ? 'Change Password:' : 'تغيير الرقم السري:'}</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input required type="password" value={newPass} onChange={e => setNewPass(e.target.value)} placeholder={isEn ? 'New Password' : 'الرقم السري الجديد (4+ حروف)'} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" />
+                  <input required type="password" value={confPass} onChange={e => setConfPass(e.target.value)} placeholder={isEn ? 'Confirm Password' : 'تأكيد الرقم السري الجديد'} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" />
+                </div>
+                <button disabled={busy} className="w-full py-2.5 bg-amber-500 text-black font-black rounded-xl">{busy ? '...' : (isEn ? 'Save New Password' : 'حفظ الرقم السري الجديد ✓')}</button>
+              </form>
+            </div>
+          ) : (
+            <div className="p-4 bg-neutral-900 border border-neutral-800 rounded-3xl text-center space-y-2"><p className="text-neutral-400">{isEn ? 'Login to change your password and profile photo.' : 'سجل دخولك لتغيير صورتك الشخصية والرقم السري لحسابك.'}</p><button onClick={() => navigate('account')} className="px-4 py-2 bg-amber-500 text-black font-black rounded-xl">{isEn ? 'Login / Account' : 'الذهاب لتسجيل الدخول'}</button></div>
+          )}
+        </div>
+      );
+    }
     ReactDOM.createRoot(document.getElementById('root')).render(<AppErrorBoundary><App /></AppErrorBoundary>);
   </script>
 </body>
