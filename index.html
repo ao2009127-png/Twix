@@ -394,7 +394,8 @@
         playNotificationSound('click');
         if (page === 'admin' && to !== 'admin') setAdminShift(null);
         if (to !== 'admin') setAdminShift(null);
-        setPage(to); setMobileMenu(false); window.scrollTo({ top: 0, behavior: 'smooth' });
+        window.location.hash = to === 'admin' ? '' : `#${to}`;
+     setPage(to); setMobileMenu(false); window.scrollTo({ top: 0, behavior: 'smooth' });
       };
 
       let myActiveBooking = null, activeTimer = { state: 'inactive', remainingSec: 0 };
