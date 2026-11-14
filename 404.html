@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>TWIX Gaming Lounge</title>
+<script>
+(function() {
+var l = window.location;
+var isGh = l.hostname.endsWith('github.io');
+var segs = l.pathname.split('/').filter(Boolean);
+var base = isGh && segs.length > 0 ? '/' + segs[0] + '/' : '/';
+l.replace(l.origin + base + (l.search || '') + (l.hash || ''));
+})();
+</script>
+</head>
+<body style="background:#080808;color:#fbbf24;font-family:sans-serif;text-align:center;padding-top:40px;">
+جاري فتح TWIX Gaming Lounge...
+</body>
+</html>
