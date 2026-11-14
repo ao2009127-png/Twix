@@ -93,19 +93,9 @@ const hasLocalProfanity = (txt) => {
 const clean = (txt || '').toLowerCase().trim();
 return BAD_WORDS.some(w => new RegExp("(^|\\s)" + w + "|" + w + "($|\\s)", 'i').test(clean) || (w.length > 3 && clean.includes(w)));
 };
-  class AppErrorBoundary extends React.Component {
-constructor(p) { super(p); this.state = { hasError: false, errMsg: '' }; }
-static getDerivedStateFromError(err) { return { hasError: true, errMsg: err?.message || 'خطأ غير متوقع' }; }
-render() {
-if (this.state.hasError) return (
-<div className="min-h-screen flex items-center justify-center p-6 bg-[#080808] text-white text-center"><div className="max-w-md w-full bg-neutral-900 border border-rose-500/50 rounded-3xl p-6 space-y-4"><div className="text-4xl">⚠️</div><h2 className="text-lg font-black text-rose-400">حدث خطأ مؤقت</h2><p className="text-xs text-neutral-400 font-mono bg-neutral-950 p-3 rounded-xl">{this.state.errMsg}</p><button onClick={() => window.location.reload()} className="w-full py-2.5 bg-amber-500 text-black font-black rounded-xl text-xs">إعادة تحميل ↻</button></div></div>
-);
-return this.props.children;
-}
-}
 let sharedAudioCtx = null;
 const unlockAudio = () => { try { if (!sharedAudioCtx) sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)(); if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume(); } catch (e) {} };
-function playNotificationSound(type = 'click') {
+  function playNotificationSound(type = 'click') {
 try {
 unlockAudio(); const ctx = sharedAudioCtx; if (!ctx) return;
 const sMuted = safeJSONParse('twix_cust_settings', {}).soundEnabled === false || localStorage.getItem('twix_mute_sound') === '1';
@@ -128,31 +118,31 @@ else if (type === 'countdown') { osc.type = 'sine'; osc.frequency.setValueAtTime
 }
 const triggerBrowserNotification = (title, body) => { try { if ('Notification' in window && Notification.permission === 'granted') new Notification(title, { body, tag: "twix-" + Date.now() }); } catch (e) {} };
 const validateEgyptianPhone = (p) => /^01[0125][0-9]{8}$/.test((p || '').trim());
-function compressImageFile(file, maxDim = 700) {
+function compressImageFile(file, maxDim = 600) {
 return new Promise((resolve, reject) => {
 if (!file) return reject(new Error('لم يتم اختيار ملف'));
 const reader = new FileReader();
 reader.onerror = () => reject(new Error('تعذر قراءة الصورة'));
 reader.onload = (e) => {
 const img = new Image();
-img.onerror = () => reject(new Error('صيغة الصورة غير مدعومة (استخدم JPG أو PNG)'));
+img.onerror = () => reject(new Error('صيغة الصورة غير مدعومة'));
 img.onload = () => {
 try {
 const c = document.createElement('canvas'); let w = img.width, h = img.height;
 if (w > h && w > maxDim) { h = Math.round((h * maxDim) / w); w = maxDim; } else if (h > maxDim) { w = Math.round((w * maxDim) / h); h = maxDim; }
-c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0, w, h); resolve(c.toDataURL('image/jpeg', 0.65));
+c.width = w; c.height = h; c.getContext('2d').drawImage(img, 0, 0, w, h); resolve(c.toDataURL('image/jpeg', 0.6));
 } catch (err) { reject(err); }
 }; img.src = e.target.result;
 }; reader.readAsDataURL(file);
 });
 }
-function FilePickerButton({ onPick, label = 'اختيار صورة 📸', className = '', maxDim = 700, disabled = false }) {
+function FilePickerButton({ onPick, label = 'اختيار صورة 📸', className = '', maxDim = 600, disabled = false }) {
 const ref = useRef(null); const [busy, setBusy] = useState(false);
 const handleFile = async (e) => {
 const f = e.target.files && e.target.files[0]; e.target.value = '';
 if (!f) return; setBusy(true);
 try { const b64 = await compressImageFile(f, maxDim); onPick(b64); }
-catch (err) { alert(err?.message || 'تعذر رفع الصورة، جرب صورة أخرى.'); }
+catch (err) { alert(err?.message || 'تعذر رفع الصورة.'); }
 finally { setBusy(false); }
 };
 return (<><input ref={ref} type="file" accept="image/*" className="hidden" onChange={handleFile} /><button type="button" disabled={disabled || busy} onClick={() => { if (ref.current) { ref.current.value = ''; ref.current.click(); } }} className={className || 'w-full py-2.5 px-3 bg-neutral-950 border border-dashed border-amber-500/50 text-amber-300 font-bold rounded-xl text-[11px]'}>{busy ? '⏳ جاري تجهيز الصورة...' : label}</button></>);
@@ -180,7 +170,7 @@ return { ok: true, id };
 if (res.ok) logSystemEvent(customerName || customerPhone, 'GIFT_REQUEST', title);
 return res;
 }
-  const tr = (ar, en, lang) => (lang === 'en' ? en : ar);
+const tr = (ar, en, lang) => (lang === 'en' ? en : ar);
 const DEFAULT_CONFIG = {
 loungeName: "TWIX Gaming Lounge", phone: "01289333316", whatsappNumber: "201289333316",
 wallets: { vodafone: "01289333316", instapay: "", orange: "", etisalat: "", wepay: "" },
@@ -205,7 +195,7 @@ const DURATION_OPTIONS = [
 { mins: 300, label: "5 ساعات" }, { mins: 360, label: "6 ساعات (نصف يوم)" }, { mins: 420, label: "7 ساعات" },
 { mins: 480, label: "8 ساعات" }, { mins: 540, label: "9 ساعات" }, { mins: 600, label: "10 ساعات" }, { mins: 660, label: "11 ساعة" }, { mins: 720, label: "12 ساعة (يوم كامل)" }
 ];
-const DEFAULT_SNACKS = [
+  const DEFAULT_SNACKS = [
 { id: 'indomie_beef', name: 'إندومي باللحمة', price: 25, costPrice: 15, icon: '🥩', category: 'indomie', stock: 20, available: true },
 { id: 'indomie_chicken', name: 'إندومي بالفراخ', price: 25, costPrice: 15, icon: '🍗', category: 'indomie', stock: 20, available: true },
 { id: 'indomie_veg', name: 'إندومي بالخضار', price: 25, costPrice: 15, icon: '🥦', category: 'indomie', stock: 20, available: true },
@@ -319,8 +309,18 @@ if (!free) return { ok: false, freeByType, error: "عفواً! جميع أجهز
 occupiedIds.add(free.id); assignedIds.push(free.id);
 }
 return { ok: true, assignedIds, freeByType };
-            }
-  function App() {
+ }
+  class AppErrorBoundary extends React.Component {
+constructor(p) { super(p); this.state = { hasError: false, errMsg: '' }; }
+static getDerivedStateFromError(err) { return { hasError: true, errMsg: err?.message || 'خطأ غير متوقع' }; }
+render() {
+if (this.state.hasError) return (
+<div className="min-h-screen flex items-center justify-center p-6 bg-[#080808] text-white text-center"><div className="max-w-md w-full bg-neutral-900 border border-rose-500/50 rounded-3xl p-6 space-y-4"><div className="text-4xl">⚠️</div><h2 className="text-lg font-black text-rose-400">حدث خطأ مؤقت</h2><p className="text-xs text-neutral-400 font-mono bg-neutral-950 p-3 rounded-xl">{this.state.errMsg}</p><button onClick={() => window.location.reload()} className="w-full py-2.5 bg-amber-500 text-black font-black rounded-xl text-xs">إعادة تحميل ↻</button></div></div>
+);
+return this.props.children;
+}
+}
+function App() {
 const VALID_PAGES = ['home','booking','payment','bundles','parties','challenges','predictions','wheel','squad_hub','memories','in_lounge','hall_of_fame','guide','reviews','account','settings','admin'];
 const [page, setPage] = useState(() => { const h = (window.location.hash || '').replace('#', ''); return (VALID_PAGES.includes(h) && h !== 'admin') ? h : 'home'; });
 const [mobileMenu, setMobileMenu] = useState(false);
@@ -357,16 +357,24 @@ const [squadUnreadMap, setSquadUnreadMap] = useState({});
 const [custSettings, setCustSettings] = useState(() => safeJSONParse('twix_cust_settings', { lang: 'ar', theme: 'dark', fontSize: 'normal', reduceMotion: false, soundEnabled: true, alertMinutes: 10, prefDevice: 'PS5', prefMode: 'single', prefGame: '', prefSugar: 'medium', useNickname: false, nickname: '' }));
 const lang = custSettings.lang === 'en' ? 'en' : 'ar';
 const alertRef = useRef({});
+
 useEffect(() => { if (selectedOffer) sessionStorage.setItem('twix_selected_offer', JSON.stringify(selectedOffer)); else sessionStorage.removeItem('twix_selected_offer'); }, [selectedOffer]);
 useEffect(() => { if (aiBookingDraft) sessionStorage.setItem('twix_ai_draft', JSON.stringify(aiBookingDraft)); else sessionStorage.removeItem('twix_ai_draft'); }, [aiBookingDraft]);
 useEffect(() => {
 localStorage.setItem('twix_cust_settings', JSON.stringify(custSettings));
 localStorage.setItem('twix_mute_sound', custSettings.soundEnabled === false ? '1' : '0');
-document.documentElement.dir = lang === 'en' ? 'ltr' : 'rtl'; document.documentElement.lang = lang;
+document.documentElement.dir = lang === 'en' ? 'ltr' : 'rtl';
+document.documentElement.lang = lang;
 }, [custSettings, lang]);
-useEffect(() => { const onHash = () => { const h = (window.location.hash || '').replace('#', ''); if (VALID_PAGES.includes(h) && h !== 'admin') setPage(h); }; window.addEventListener('hashchange', onHash); return () => window.removeEventListener('hashchange', onHash); }, []);
 useEffect(() => {
-const unlock = () => unlockAudio(); window.addEventListener('pointerdown', unlock, { once: true }); return () => window.removeEventListener('pointerdown', unlock);
+const onHash = () => { const h = (window.location.hash || '').replace('#', ''); if (VALID_PAGES.includes(h) && h !== 'admin') setPage(h); };
+window.addEventListener('hashchange', onHash);
+return () => window.removeEventListener('hashchange', onHash);
+}, []);
+useEffect(() => {
+const unlock = () => unlockAudio();
+window.addEventListener('pointerdown', unlock, { once: true });
+return () => window.removeEventListener('pointerdown', unlock);
 }, []);
 useEffect(() => { localStorage.setItem('twix_config', JSON.stringify(config)); }, [config]);
 useEffect(() => { localStorage.setItem('twix_pricing', JSON.stringify(pricing)); }, [pricing]);
@@ -375,6 +383,7 @@ useEffect(() => { localStorage.setItem('twix_snacks', JSON.stringify(snacksMenu)
 useEffect(() => { if (currentCustomer) localStorage.setItem('twix_customer', JSON.stringify(currentCustomer)); else localStorage.removeItem('twix_customer'); }, [currentCustomer]);
 useEffect(() => { if (pendingBooking) sessionStorage.setItem('twix_pending_booking', JSON.stringify(pendingBooking)); else sessionStorage.removeItem('twix_pending_booking'); }, [pendingBooking]);
 useEffect(() => { const t = setInterval(() => { if (!globalFrozen) setNow(Date.now()); }, 1000); return () => clearInterval(t); }, [globalFrozen]);
+
 useEffect(() => {
 const u1 = db.collection('site_settings').doc('config').onSnapshot(d => { if (d.exists) setConfig(p => ({ ...p, ...d.data() })); }, () => {});
 const u2 = db.collection('site_settings').doc('pricing').onSnapshot(d => { if (d.exists) setPricing(p => ({ ...p, ...d.data() })); }, () => {});
@@ -395,7 +404,7 @@ const u16 = db.collection('ai_memory').orderBy('createdAt', 'desc').limit(15).on
 const u17 = db.collection('bookings').where('date', '==', getCairoDateStr()).where('status', '==', 'confirmed').onSnapshot(s => { let cnt = 0; s.forEach(d => { const ti = getBookingTimerInfo(d.data(), Date.now()); if (ti.state === 'running' || ti.state === 'paused') cnt += (d.data().bookedDevices?.length || 1); }); setRunningBookingsCount(cnt); }, () => {});
 return () => { u1(); u2(); u3(); u4(); u5(); u6(); u7(); u8(); u9(); u10(); u11(); u12(); u13(); u14(); u15(); u16(); u17(); };
 }, []);
-useEffect(() => {
+  useEffect(() => {
 const mySquads = safeJSONParse('twix_my_squads_list', []);
 const activeSq = localStorage.getItem('twix_active_squad') || '';
 if (!mySquads.length) return;
@@ -412,6 +421,7 @@ setSquadUnreadMap(p => ({ ...p, [code]: unread }));
 }, () => {}));
 return () => unsubs.forEach(u => u());
 }, [page]);
+
 useEffect(() => {
 if (!offers.length) return;
 const params = new URLSearchParams(window.location.search), offerId = params.get('offer'), targetPage = params.get('page'), refP = params.get('ref');
@@ -424,6 +434,7 @@ window.history.replaceState({}, '', window.location.pathname + window.location.h
 setPage(targetPage); window.location.hash = '#' + targetPage; window.history.replaceState({}, '', window.location.pathname + window.location.hash);
 }
 }, [offers]);
+
 useEffect(() => {
 if (!currentCustomer?.phone) { setMyBookings([]); setMyGifts([]); return; }
 const u1 = db.collection('customers').doc(currentCustomer.phone).onSnapshot(doc => {
@@ -433,6 +444,7 @@ const u2 = db.collection('bookings').where('phone', '==', currentCustomer.phone)
 const u3 = db.collection('gifts').where('customerPhone', '==', currentCustomer.phone).onSnapshot(s => { const l = []; s.forEach(d => l.push({ id: d.id, ...d.data() })); l.sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||'')); setMyGifts(l); }, () => {});
 return () => { u1(); u2(); u3(); };
 }, [currentCustomer?.phone]);
+
 useEffect(() => {
 if (!currentCustomer?.birthVerified || !currentCustomer?.birthDate) return;
 const today = getCairoDateStr(), yr = today.slice(0, 4);
@@ -442,6 +454,7 @@ if (r.ok) db.collection('customers').doc(currentCustomer.phone).set({ lastBirthd
 });
 }
 }, [currentCustomer?.phone, currentCustomer?.birthVerified, currentCustomer?.birthDate, currentCustomer?.lastBirthdayRewardYear]);
+
 const totalSquadUnread = Object.values(squadUnreadMap).reduce((a, b) => a + Number(b || 0), 0);
 const totalDevices = devices.filter(d => d.status !== 'maintenance').length || devices.length;
 const busyCount = Math.min(totalDevices, Math.max(liveSessions.length, devices.filter(d => d.status === 'busy').length) + runningBookingsCount);
@@ -453,6 +466,7 @@ window.location.hash = to === 'admin' ? '' : '#' + to; setPage(to); setMobileMen
 let myActiveBooking = null, activeTimer = { state: 'inactive', remainingSec: 0 };
 for (const b of myBookings) { const ti = getBookingTimerInfo(b, now); if (ti.state === 'running' || ti.state === 'paused') { myActiveBooking = b; activeTimer = ti; break; } }
 const remainingBookingSeconds = activeTimer.remainingSec;
+
 useEffect(() => {
 if (!myActiveBooking || activeTimer.state !== 'running') return;
 const alSec = Number(custSettings.alertMinutes || 10) * 60, k1 = "c1_" + myActiveBooking.id, k5 = "c5_" + myActiveBooking.id;
@@ -464,10 +478,12 @@ if (remainingBookingSeconds <= 300 && remainingBookingSeconds > 0 && !alertRef.c
 alertRef.current[k5] = true; playNotificationSound('alarm'); triggerBrowserNotification('🔔 تنبيه: باقي 5 دقائق!', 'وقتك على وشك الانتهاء في الصالة.');
 }
 }, [remainingBookingSeconds, myActiveBooking?.id, activeTimer.state, custSettings.alertMinutes]);
+
 const sendQuickInLounge = (type, detail, soundType, extra = {}) => {
 const req = { id: "req-" + Date.now(), screenName: myActiveBooking?.devicesSummary || 'طاولة عميل', customerName: (custSettings.useNickname && custSettings.nickname) ? custSettings.nickname : (currentCustomer?.name || 'عميل أونلاين'), type, detail, status: 'pending', time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }), createdAt: new Date().toISOString(), ...extra };
 db.collection('in_lounge_requests').doc(req.id).set(req); logSystemEvent(currentCustomer?.name || 'عميل', 'IN_LOUNGE_REQ', detail); playNotificationSound(soundType);
 };
+
 const handleRequestSmartExtension = async (bk = myActiveBooking) => {
 if (!bk) return;
 const curEndMs = parseCairoSlotMs(bk.date, bk.time) + (Number(bk.duration || 30) * 60000), endD = new Date(curEndMs);
@@ -481,6 +497,7 @@ const addCost = reqDevs.reduce((s, d) => s + calcDevicePrice(pricing, d.type, d.
 sendQuickInLounge('extend', "طلب تمديد 30 دقيقة لحجز " + bk.ref + " (+" + addCost + " ج) — بانتظار موافقة المدير", 'cash', { bookingId: bk.id, addMins: 30, addCost });
 alert("✓ اتبعت طلب تمديد 30 دقيقة (+" + addCost + " ج) للمدير للموافقة والتنفيذ!");
 };
+
 const handleEmergencyCancel = (bk = myActiveBooking) => {
 if (!bk) return;
 const ti = getBookingTimerInfo(bk, now), totalMins = Number(bk.duration || 30), elapsedMins = Math.max(1, Math.ceil((totalMins * 60 - ti.remainingSec) / 60));
@@ -490,7 +507,7 @@ if (!confirm("⚠️ طلب إلغاء طارئ (" + bk.ref + "):\n• قعدت:
 sendQuickInLounge('emergency_cancel', "طلب إلغاء طارئ " + bk.ref + ": قعد " + elapsedMins + "د (" + usedCost + "ج) — متبقي " + refundDue + "ج", 'alert', { bookingId: bk.id, bookingRef: bk.ref, customerPhone: bk.phone, elapsedMins, usedCost, refundDue });
 alert('تم إرسال طلب الإلغاء الطارئ للمدير لمراجعته واعتماده.');
 };
-    const navLinks = [['home', tr('الرئيسية', 'Home', lang)], ['booking', tr('احجز دورك 🎮', 'Book 🎮', lang)], ['bundles', tr('🎁 الباقات', '🎁 Bundles', lang)], ['parties', tr('🎉 الحفلات', '🎉 Parties', lang)], ['challenges', tr('⚔️ التحديات والبطولات', '⚔️ Arena', lang)], ['predictions', tr('⚽ التوقعات', '⚽ Predictions', lang)], ['wheel', tr('🎡 العجلة', '🎡 Wheel', lang)], ['squad_hub', tr('👥 الشلة', '👥 Squad', lang)], ['in_lounge', tr('🛎️ الطاولة', '🛎️ Table', lang)], ['guide', tr('📜 الدليل', '📜 Guide', lang)]];
+  const navLinks = [['home', tr('الرئيسية', 'Home', lang)], ['booking', tr('احجز دورك 🎮', 'Book 🎮', lang)], ['bundles', tr('🎁 الباقات', '🎁 Bundles', lang)], ['parties', tr('🎉 الحفلات', '🎉 Parties', lang)], ['challenges', tr('⚔️ التحديات والبطولات', '⚔️ Arena', lang)], ['predictions', tr('⚽ التوقعات', '⚽ Predictions', lang)], ['wheel', tr('🎡 العجلة', '🎡 Wheel', lang)], ['squad_hub', tr('👥 الشلة', '👥 Squad', lang)], ['in_lounge', tr('🛎️ الطاولة', '🛎️ Table', lang)], ['guide', tr('📜 الدليل', '📜 Guide', lang)]];
 return (
 <div className={"min-h-screen flex flex-col justify-between selection:bg-amber-500 selection:text-black text-[#f5f5f5] " + (custSettings.theme === 'midnight' ? 'bg-[#060c18]' : (custSettings.theme === 'oled' ? 'bg-black' : 'bg-[#080808]')) + (custSettings.fontSize === 'large' ? ' text-[15px]' : '') + (custSettings.reduceMotion ? ' [&_*]:!animate-none' : '')}>
 {globalFrozen && <div className="bg-rose-600 text-white font-black text-xs py-2.5 px-4 text-center animate-pulse sticky top-0 z-50">⚠️ تجميد طوارئ شامل نشط — جميع العدادات متوقفة مجاناً</div>}
@@ -579,7 +596,7 @@ setOnTheWayTarget(null); playNotificationSound('cash'); alert('✓ تم إرسا
 </footer>
 </div>
 );
-  }
+                                                                                                                                                                  }
   function HomePage({ navigate, config, pricing, devices, snacksMenu, loungeCapacityStatus, busyCount, totalDevices, challenges, offers, now, setSelectedOffer, lang }) {
 const currentBoss = challenges.find(c => c.isBoss) || { playerName: "شاغر للتحدي 👑", game: "EA Sports FC / FIFA", score: 0, rewardText: "خصم بموافقة الإدارة لمن يهزم الزعيم" };
 const activeOffers = (offers || []).filter(o => !o.expiresAt || Number(o.expiresAt) > now);
@@ -658,11 +675,13 @@ const [busy, setBusy] = useState(false);
 const countPS5 = bookedDevices.filter(d => d.type === 'PS5').length;
 const countPS4 = bookedDevices.filter(d => d.type === 'PS4').length;
 const isOfferMode = !!selectedOffer;
+
 useEffect(() => {
 let alive = true;
 findAvailableDevicesForSlot(date, time, [], devices).then(r => { if (alive && r.freeByType) setSlotFree(r.freeByType); }).catch(() => {});
 return () => { alive = false; };
 }, [date, time, devices]);
+
 const handleAddAnotherDevice = () => {
 playNotificationSound('click');
 setBookedDevices(prev => {
@@ -674,6 +693,7 @@ setErrorMsg("الحد الأقصى المتاح بالميعاد ده: PS5 (" + 
 return prev;
 });
 };
+
 const handleUpdateDevice = (id, field, value) => {
 setBookedDevices(prev => {
 const c5 = prev.filter(d => d.id !== id && d.type === 'PS5').length, c4 = prev.filter(d => d.id !== id && d.type === 'PS4').length;
@@ -682,16 +702,19 @@ if (field === 'type' && value === 'PS4' && c4 >= Math.min(maxPS4, slotFree.PS4))
 return prev.map(d => d.id === id ? { ...d, [field]: value } : d);
 });
 };
+
 const handleUpdateSnackQty = (snack, delta) => {
 const nxt = (selectedSnacks[snack.id] || 0) + delta;
 if (nxt > (snack.stock ?? 20)) return alert("المتاح في المخزون " + (snack.stock ?? 0) + " فقط.");
 playNotificationSound('click'); setSelectedSnacks(p => ({ ...p, [snack.id]: Math.max(0, nxt) }));
 };
+
 const rawDevCost = isOfferMode ? Number(selectedOffer.price || 0) : bookedDevices.reduce((s, d) => s + calcDevicePrice(pricing, d.type, d.mode, d.duration), 0);
 const hhDiscount = !isOfferMode && isHappyHourAt(config, Number((time || '17:00').split(':')[0])) ? Math.round(rawDevCost * (Number(config.happyHour?.discountPercent || 15) / 100)) : 0;
 const totalDevicesCost = Math.max(0, rawDevCost - hhDiscount);
 const totalSnacksCost = snacksMenu.reduce((s, sn) => s + ((selectedSnacks[sn.id] || 0) * sn.price), 0);
 const finalTotalCost = Math.max(0, totalDevicesCost + totalSnacksCost - promoDiscount);
+
 const handleSubmit = async (e) => {
 e.preventDefault(); if (busy) return; setErrorMsg('');
 if (name.trim().split(/\s+/).length < 2) return setErrorMsg('اكتب اسمك واسم والدك ثنائياً.');
@@ -714,6 +737,7 @@ setPendingBooking({ id: "bk-" + Date.now(), ref: "TX-" + Math.floor(100000 + Mat
 setBusy(false); navigate('payment');
 } catch { setBusy(false); setErrorMsg('تعذر فحص المواعيد، حاول مرة أخرى.'); }
 };
+
 const canAddMore = (countPS5 < Math.min(maxPS5, slotFree.PS5)) || (countPS4 < Math.min(maxPS4, slotFree.PS4));
 return (
 <div className="max-w-3xl mx-auto py-6 space-y-5 text-xs">
@@ -736,8 +760,8 @@ return (
 </form>
 </div>
 );
-}
-function PaymentPage({ navigate, config, pendingBooking, setPendingBooking, currentCustomer, setMyBookings, offers }) {
+  }
+  function PaymentPage({ navigate, config, pendingBooking, setPendingBooking, currentCustomer, setCurrentCustomer, setMyBookings, offers }) {
 if (!pendingBooking) return <div className="text-center py-20 space-y-3"><p className="text-neutral-400">لا يوجد حجز معلق.</p><button onClick={() => navigate('booking')} className="bg-amber-500 text-black font-bold px-4 py-2 rounded-xl text-xs">صفحة الحجز 🎮</button></div>;
 const customerWallet = (currentCustomer && currentCustomer.walletBalance) || 0, hoursNeeded = Number(((pendingBooking.duration || 30) / 60).toFixed(2));
 const prepaidValid = currentCustomer && Number(currentCustomer.prepaidHours || 0) >= hoursNeeded && (!currentCustomer.prepaidExpiresAt || Number(currentCustomer.prepaidExpiresAt) > Date.now()) && Number(pendingBooking.totalSnacksCost || 0) === 0 && !pendingBooking.isParty;
@@ -789,14 +813,14 @@ return (
 {!paymentDoneSuccess ? (
 <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-3xl space-y-4">
 <div className="text-center border-b border-neutral-800 pb-3"><span className="text-[10px] bg-amber-500/20 text-amber-300 px-3 py-1 rounded-full font-black">يعتمد بموافقة المدير</span><h2 className="text-xl font-black text-white mt-1">تأكيد الدفع ({pendingBooking.totalCost} ج)</h2><span className="text-neutral-400 font-mono text-[11px]">{pendingBooking.ref} | {pendingBooking.date} ({pendingBooking.time})</span></div>
-  <div className="space-y-2">
+<div className="space-y-2">
 {prepaidValid && <button type="button" onClick={() => setPaymentMethod('prepaid_hours')} className={"w-full p-3 rounded-2xl border text-right flex justify-between " + (paymentMethod === 'prepaid_hours' ? 'bg-purple-500/15 border-purple-500 text-purple-300' : 'bg-neutral-950 border-neutral-800')}><span>⏳ رصيد الساعات الشهري ({currentCustomer.prepaidHours}س)</span><strong className="font-mono">-{hoursNeeded}س</strong></button>}
 <button type="button" onClick={() => setPaymentMethod('cash_full')} className={"w-full p-3 rounded-2xl border text-right flex justify-between " + (paymentMethod === 'cash_full' ? 'bg-amber-500/10 border-amber-500 text-amber-400' : 'bg-neutral-950 border-neutral-800')}><span>1. دفع بمحفظة كاش</span><strong className="font-mono">{pendingBooking.totalCost} ج</strong></button>
 <button type="button" disabled={customerWallet < pendingBooking.totalCost} onClick={() => setPaymentMethod('wallet_full')} className={"w-full p-3 rounded-2xl border text-right flex justify-between " + (customerWallet < pendingBooking.totalCost ? 'opacity-40 bg-neutral-950 border-neutral-900' : (paymentMethod === 'wallet_full' ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400' : 'bg-neutral-950 border-neutral-800'))}><span>2. رصيد المحفظة ({customerWallet}ج)</span><strong>محفظة</strong></button>
 <button type="button" disabled={customerWallet <= 0} onClick={() => setPaymentMethod('hybrid')} className={"w-full p-3 rounded-2xl border text-right flex justify-between " + (customerWallet <= 0 ? 'opacity-40 bg-neutral-950 border-neutral-900' : (paymentMethod === 'hybrid' ? 'bg-cyan-500/10 border-cyan-500 text-cyan-400' : 'bg-neutral-950 border-neutral-800'))}><span>3. هجين (محفظة + كاش)</span><strong>هجين</strong></button>
 </div>
 {remainingCashToTransfer > 0 && <div className="space-y-3"><div className="grid grid-cols-2 gap-2">{walletMap.map(w => <button key={w.id} type="button" onClick={() => setSelectedWalletType(w.id)} className={"p-2 rounded-xl border font-bold " + (selectedWalletType === w.id ? 'bg-amber-500 text-black' : 'bg-neutral-950 border-neutral-800')}>{w.name}</button>)}</div><div className="bg-neutral-950 p-3 rounded-2xl border border-neutral-800 text-center"><span className="text-[10px] text-neutral-400 block">حول ({remainingCashToTransfer} ج) للرقم:</span><div className="flex justify-center items-center gap-2 mt-1"><span className="font-mono text-base font-black text-amber-400">{targetWalletNum}</span><button type="button" onClick={() => { navigator.clipboard.writeText(targetWalletNum); setCopiedNumber(true); setTimeout(() => setCopiedNumber(false), 2000); }} className="px-2 py-1 bg-neutral-800 rounded-lg text-[10px]">{copiedNumber ? '✓' : 'نسخ'}</button></div></div><input type="tel" value={senderPhone} onChange={e => setSenderPhone(e.target.value)} placeholder="رقم المحول منه" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white font-mono text-left" /><input value={senderWalletName} onChange={e => setSenderWalletName(e.target.value)} placeholder="التحويل باسم مين؟" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" />
-  <FilePickerButton onPick={setReceiptScreenshot} label={receiptScreenshot ? '🔄 تغيير السكرين' : '📸 رفع سكرين التحويل *'} />{receiptScreenshot && <img src={receiptScreenshot} className="max-h-24 mx-auto rounded-xl" />}</div>}
+<FilePickerButton onPick={setReceiptScreenshot} label={receiptScreenshot ? '🔄 تغيير السكرين' : '📸 رفع سكرين التحويل *'} />{receiptScreenshot && <img src={receiptScreenshot} className="max-h-24 mx-auto rounded-xl" />}</div>}
 {errorMsg && <div className="p-2.5 bg-rose-500/10 border border-rose-500/40 text-rose-300 rounded-xl text-center font-bold">⚠️ {errorMsg}</div>}
 <button type="button" disabled={isSubmitting} onClick={handleExecutePayment} className="w-full py-3.5 bg-emerald-500 text-black font-black rounded-2xl">{isSubmitting ? 'جاري الإرسال...' : 'إرسال لموافقة المدير ➔'}</button>
 </div>
@@ -809,7 +833,7 @@ return (
 function BundlesPage({ navigate, bundles, pricing, devices, setPendingBooking, currentCustomer }) {
 const [selectedDevType, setSelectedDevType] = useState('PS5'); const [guestName, setGuestName] = useState(currentCustomer?.name || ''); const [guestPhone, setGuestPhone] = useState(currentCustomer?.phone || '');
 const [date, setDate] = useState(() => getCairoDateStr()); const [time, setTime] = useState('18:00'); const [busy, setBusy] = useState(false);
-  const handleBookBundle = async (b) => {
+const handleBookBundle = async (b) => {
 if (busy) return; playNotificationSound('click');
 const nm = (currentCustomer?.name || guestName).trim(), ph = (currentCustomer?.phone || guestPhone).trim();
 if (nm.split(/\s+/).length < 2) return alert('اكتب الاسم ثنائياً.'); if (!validateEgyptianPhone(ph)) return alert('اكتب رقم موبايل مصري صحيح.');
@@ -830,7 +854,7 @@ return (
 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3.5">{bundles.map(b => { const orig = (pricing[selectedDevType] || DEFAULT_PRICING.PS5)[b.mode].perHour * b.hours, fin = orig - Math.round(orig * (b.discountPercent / 100)); return (<div key={b.id} className="p-4 bg-neutral-900 border border-neutral-800 rounded-3xl flex flex-col justify-between space-y-3"><div className="space-y-2"><div className="flex justify-between"><span className="text-[10px] bg-amber-500 text-black font-black px-2 py-0.5 rounded-md">خصم {b.discountPercent}%</span><span className="text-[10px] text-neutral-400">{b.mode === 'multi' ? 'ملتي' : 'فردي'}</span></div><strong className="text-white block">{b.name}</strong><p className="text-[10px] text-neutral-400">{b.desc}</p><div className="p-2 bg-neutral-950 rounded-xl border border-neutral-800 text-[10px]"><span className="text-amber-300 font-bold block">☕ شرط الباقة:</span>{b.cafeteriaCondition}</div></div><div className="pt-2 border-t border-neutral-800 space-y-2"><div className="flex justify-between items-baseline"><span className="text-neutral-500 line-through font-mono">{orig} ج</span><span className="text-amber-400 font-black text-base font-mono">{fin} ج</span></div><button disabled={busy} onClick={() => handleBookBundle(b)} className="w-full py-2 bg-amber-500 text-black font-black rounded-xl">{busy ? 'جاري الفحص...' : 'احجز الباقة ➔'}</button></div></div>); })}</div>
 </div>
 );
-}
+  }
   function PartiesPage({ navigate, config, devices, pricing, currentCustomer, setPendingBooking }) {
 const [partyName, setPartyName] = useState(currentCustomer?.name || ''); const [partyPhone, setPartyPhone] = useState(currentCustomer?.phone || '');
 const [partyDate, setPartyDate] = useState(() => getCairoDateStr()); const [partyStartTime, setPartyStartTime] = useState('18:00'); const [partyDurationHours, setPartyDurationHours] = useState(3);
@@ -851,7 +875,7 @@ setBusy(false); if (!chk.ok) return setErrorMsg('تعارض مواعيد في ه
 setPendingBooking({ id: "party-" + Date.now(), ref: "TX-PARTY-" + Math.floor(1000 + Math.random() * 9000), customerName: partyName.trim(), phone: partyPhone.trim(), date: partyDate, time: partyStartTime, duration: partyDurationHours * 60, isParty: true, assignedDeviceIds: activeDevs.map(d => d.id), devicesSummary: "حجز الصالة بالكامل (" + activeDevs.length + " شاشات) لمدة " + partyDurationHours + " ساعات", snacksSummary: "حفلة (" + partyReason.trim() + ") - الحضور: " + attendeesCount + " أفراد", totalDevicesCost: devicesCost, totalSnacksCost: partyTax, promoDiscount: 0, totalCost: total, status: 'awaiting_payment' });
 navigate('payment');
 };
-    return (
+return (
 <div className="max-w-2xl mx-auto py-6 space-y-6 text-xs">
 <div className="text-center space-y-1"><span className="text-[10px] bg-pink-500/20 text-pink-300 px-3 py-1 rounded-full font-black">قسم المناسبات VIP — بموافقة المدير</span><h1 className="text-2xl font-black text-white">🎉 حجز الصالة بالكامل لحفلة خاصة</h1></div>
 {errorMsg && <div className="p-3 bg-rose-500/10 border border-rose-500/40 text-rose-300 rounded-2xl text-center font-bold">⚠️ {errorMsg}</div>}
@@ -864,9 +888,8 @@ navigate('payment');
 </form>
 </div>
 );
-  }
-
-  function ChallengesPage({ challenges, tournaments, publicRanks, currentCustomer, config }) {
+}
+function ChallengesPage({ challenges, tournaments, publicRanks, currentCustomer, config }) {
 const [cName, setCName] = useState(currentCustomer?.name || ''); const [cPhone, setCPhone] = useState(currentCustomer?.phone || '');
 const [game, setGame] = useState('EA FC 25 / FIFA'); const [stake, setStake] = useState('الخسران يحاسب على المشاريب 🥤'); const [busy, setBusy] = useState(false);
 const sorted = [...challenges].filter(c => (c.score || c.streak || 0) > 0).sort((a, b) => (b.score || b.streak || 0) - (a.score || a.streak || 0));
@@ -935,7 +958,7 @@ return (
 </div>
 );
 }
-function LuckyWheelPage({ wheelSegments, currentCustomer, setCurrentCustomer, myGifts }) {
+  function LuckyWheelPage({ wheelSegments, currentCustomer, setCurrentCustomer, myGifts }) {
 const [isSpinning, setIsSpinning] = useState(false); const [spinDeg, setSpinDeg] = useState(0); const [spinOutcome, setSpinOutcome] = useState(null);
 const handleSpin = () => {
 if (!currentCustomer) return alert("سجل الدخول أولاً لحفظ جوائزك!");
@@ -1053,7 +1076,7 @@ return (
 </div>
 );
 }
-function AccountPage({ config, currentCustomer, setCurrentCustomer, bookings, gifts, navigate, now, handleRequestSmartExtension, handleEmergencyCancel, setOnTheWayTarget }) {
+  function AccountPage({ config, currentCustomer, setCurrentCustomer, bookings, gifts, navigate, now, handleRequestSmartExtension, handleEmergencyCancel, setOnTheWayTarget }) {
 const [loginPhone, setLoginPhone] = useState(''); const [loginPass, setLoginPass] = useState('');
 const [signupName, setSignupName] = useState(''); const [signupPhone, setSignupPhone] = useState(''); const [signupPass, setSignupPass] = useState('');
 const [signupBirthDate, setSignupBirthDate] = useState(''); const [signupIdCard, setSignupIdCard] = useState(null); const [signupReferral, setSignupReferral] = useState(() => localStorage.getItem('twix_pending_ref_param') || '');
@@ -1078,13 +1101,12 @@ const nm = signupName.trim(), ph = signupPhone.trim();
 if (nm.split(/\s+/).length < 2) return alert('اكتب الاسم ثنائياً.');
 if (!validateEgyptianPhone(ph)) return alert('اكتب رقم مصري (11 رقماً).');
 if (signupPass.trim().length < 4) return alert('الرقم السري لا يقل عن 4 حروف.');
-if (signupBirthDate && !signupIdCard) return alert('لتفعيل هدية عيد الميلاد، أرفق صورة واضحة للبطاقة أو شهادة الميلاد (أو امسح تاريخ الميلاد لو مش عايزها).');
+if (signupBirthDate && !signupIdCard) return alert('لتفعيل هدية عيد الميلاد، أرفق صورة واضحة للبطاقة أو شهادة الميلاد.');
 setBusy(true);
 try {
 const existsDoc = await db.collection('customers').doc(ph).get();
 if (existsDoc.exists) { setBusy(false); return alert('هذا الرقم مسجل بالفعل!'); }
-const refCode = signupReferral.trim().toUpperCase();
-const validRef = refCode && refCode !== ("TX-" + ph.slice(-4)) ? refCode : '';
+const refCode = signupReferral.trim().toUpperCase(), validRef = refCode && refCode !== ("TX-" + ph.slice(-4)) ? refCode : '';
 const data = { name: nm, phone: ph, password: signupPass.trim(), birthDate: signupBirthDate || '', idCardImage: signupIdCard || null, birthVerified: false, birthDocPending: !!(signupBirthDate && signupIdCard), avatarUrl: null, walletBalance: 0, prepaidHours: 0, prepaidDeviceType: 'PS5', prepaidExpiresAt: null, xp: 50, monthlyXP: 50, monthKey: getCairoMonthKey(), hoursPlayed: 0, rewards: [], claimedAchievements: [], incidents: [], usedPromos: [], pendingReferralCode: validRef, referralPaid: false, referralBonusAwarded: false, trustScore: 80, trustLabel: 'جيد', myReferralCode: "TX-" + ph.slice(-4), status: 'pending_approval', createdAt: new Date().toISOString() };
 await db.collection('customers').doc(ph).set(data);
 logSystemEvent(nm, 'NEW_SIGNUP', "حساب جديد (" + ph + ")" + (data.birthDocPending ? ' + توثيق ميلاد' : '')); setIsPending(true); playNotificationSound('cash');
@@ -1098,18 +1120,17 @@ const r = await submitGiftRequest({ customerPhone: currentCustomer.phone, custom
 if (r.ok) { await db.collection('customers').doc(currentCustomer.phone).set({ claimedAchievements: firebase.firestore.FieldValue.arrayUnion(ach.id) }, { merge: true }); playNotificationSound('cash'); alert('تم إرسال طلب هدية الإنجاز للمدير للموافقة وتحديد الميعاد!'); }
 } finally { setBusy(false); }
 };
-if (isPending) return <div className="max-w-md mx-auto py-12 text-center space-y-4"><div className="text-4xl">⏳</div><h2 className="text-xl font-black text-white">حسابك قيد المراجعة والتفعيل</h2><p className="text-xs text-neutral-300 bg-neutral-900 p-4 rounded-2xl border border-neutral-800">بيتم مراجعة حسابك دلوقتي من الإدارة/الذكاء الاصطناعي وهيتفعل في لحظات.</p><button onClick={() => { setIsPending(false); navigate('home'); }} className="px-6 py-2.5 bg-amber-500 text-black font-black rounded-xl text-xs">الرئيسية</button></div>;
+if (isPending) return <div className="max-w-md mx-auto py-12 text-center space-y-4"><div className="text-4xl">⏳</div><h2 className="text-xl font-black text-white">حسابك قيد المراجعة والتفعيل</h2><p className="text-xs text-neutral-300 bg-neutral-900 p-4 rounded-2xl border border-neutral-800">بيتم مراجعة حسابك دلوقتي وهيتفعل في لحظات.</p><button onClick={() => { setIsPending(false); navigate('home'); }} className="px-6 py-2.5 bg-amber-500 text-black font-black rounded-xl text-xs">الرئيسية</button></div>;
 if (!currentCustomer) return (
 <div className="max-w-md mx-auto py-8 space-y-5 text-xs">
 <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-3xl space-y-4">
 <div className="flex bg-neutral-950 p-1 rounded-2xl border border-neutral-800"><button onClick={() => setIsSignup(false)} className={"flex-1 py-2 rounded-xl font-black " + (!isSignup ? 'bg-amber-500 text-black' : 'text-neutral-400')}>دخول</button><button onClick={() => setIsSignup(true)} className={"flex-1 py-2 rounded-xl font-black " + (isSignup ? 'bg-amber-500 text-black' : 'text-neutral-400')}>حساب جديد</button></div>
-{!isSignup ? <form onSubmit={handleLogin} className="space-y-3"><input required type="tel" value={loginPhone} onChange={e => setLoginPhone(e.target.value)} placeholder="01xxxxxxxxx" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white font-mono text-left" /><input required type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="الرقم السري" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><span className="text-[10px] text-neutral-400 block">🔑 نسيت الرقم السري؟ المدير فقط يقدر يعينهولك أو يغيّر رقمك.</span><button className="w-full py-3 bg-amber-500 text-black font-black rounded-xl">دخول ➔</button></form> : <form onSubmit={handleSignup} className="space-y-3"><input required value={signupName} onChange={e => setSignupName(e.target.value)} placeholder="الاسم واسم الأب" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><input required type="tel" value={signupPhone} onChange={e => setSignupPhone(e.target.value)} placeholder="01xxxxxxxxx" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white font-mono text-left" /><input required type="password" value={signupPass} onChange={e => setSignupPass(e.target.value)} placeholder="الرقم السري (4+ حروف)" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><div className="p-2.5 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-2">
-<span className="text-[10px] text-pink-300 font-bold block">🎂 هدية عيد الميلاد (اختياري — يتطلب صورة واضحة للبطاقة أو شهادة الميلاد لمراجعة المدير):</span><div className="grid grid-cols-2 gap-2"><input type="date" value={signupBirthDate} onChange={e => setSignupBirthDate(e.target.value)} className="bg-neutral-900 border border-neutral-800 rounded-xl p-2 text-white font-mono text-[10px]" /><FilePickerButton onPick={setSignupIdCard} label={signupIdCard ? '✓ تم اختيار الوثيقة' : '🪪 بطاقة / شهادة ميلاد'} className="bg-neutral-900 p-2 rounded-xl border border-neutral-800 text-[10px] text-amber-300 font-bold" /></div></div><input value={signupReferral} onChange={e => setSignupReferral(e.target.value)} placeholder="كود الإحالة (اختياري لأول صديق 5ج)" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-amber-300 font-mono uppercase" /><button disabled={busy} className="w-full py-3 bg-amber-500 text-black font-black rounded-xl">{busy ? 'جاري التسجيل...' : 'إرسال طلب التسجيل ➔'}</button></form>}
+{!isSignup ? <form onSubmit={handleLogin} className="space-y-3"><input required type="tel" value={loginPhone} onChange={e => setLoginPhone(e.target.value)} placeholder="01xxxxxxxxx" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white font-mono text-left" /><input required type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="الرقم السري" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><span className="text-[10px] text-neutral-400 block">🔑 نسيت الرقم السري؟ المدير فقط يقدر يعينهولك أو يغيّر رقمك.</span><button className="w-full py-3 bg-amber-500 text-black font-black rounded-xl">دخول ➔</button></form> : <form onSubmit={handleSignup} className="space-y-3"><input required value={signupName} onChange={e => setSignupName(e.target.value)} placeholder="الاسم واسم الأب" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><input required type="tel" value={signupPhone} onChange={e => setSignupPhone(e.target.value)} placeholder="01xxxxxxxxx" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white font-mono text-left" /><input required type="password" value={signupPass} onChange={e => setSignupPass(e.target.value)} placeholder="الرقم السري (4+ حروف)" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><div className="p-2.5 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-2"><span className="text-[10px] text-pink-300 font-bold block">🎂 هدية عيد الميلاد: أرفق صورة البطاقة / شهادة الميلاد:</span><div className="grid grid-cols-2 gap-2"><input type="date" value={signupBirthDate} onChange={e => setSignupBirthDate(e.target.value)} className="bg-neutral-900 border border-neutral-800 rounded-xl p-2 text-white font-mono text-[10px]" /><FilePickerButton onPick={setSignupIdCard} label={signupIdCard ? '✓ تم اختيار الوثيقة' : '🪪 بطاقة / شهادة ميلاد'} className="bg-neutral-900 p-2 rounded-xl border border-neutral-800 text-[10px] text-amber-300 font-bold" /></div></div><input value={signupReferral} onChange={e => setSignupReferral(e.target.value)} placeholder="كود الإحالة (اختياري لأول صديق 5ج)" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-amber-300 font-mono uppercase" /><button disabled={busy} className="w-full py-3 bg-amber-500 text-black font-black rounded-xl">{busy ? 'جاري التسجيل...' : 'إرسال طلب التسجيل ➔'}</button></form>}
 </div>
 <form onSubmit={async e => { e.preventDefault(); if (!validateEgyptianPhone(guestPhone)) return alert('رقم غير صحيح.'); const s = await db.collection('bookings').where('phone', '==', guestPhone.trim()).get(); const l = []; s.forEach(d => l.push(d.data())); setGuestBookings(l); }} className="bg-neutral-900 border border-neutral-800 p-4 rounded-3xl space-y-2"><strong className="text-amber-400 block">🔍 متابعة حجز بدون حساب:</strong><div className="flex gap-2"><input value={guestPhone} onChange={e => setGuestPhone(e.target.value)} placeholder="رقم الموبايل" className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white font-mono text-left" /><button className="px-3 bg-neutral-800 rounded-xl font-bold">بحث</button></div>{guestBookings && guestBookings.slice(0, 4).map(b => <div key={b.id} className="p-2 bg-neutral-950 rounded-xl flex justify-between"><span>{b.ref} ({b.date} {b.time})</span><strong className="text-amber-400">{b.status === 'confirmed' ? 'مؤكد ✅' : 'قيد المراجعة ⏳'}</strong></div>)}</form>
 </div>
 );
-  const lvl = calculateInfiniteLevel(currentCustomer.xp || 50, currentCustomer.hoursPlayed || 0);
+const lvl = calculateInfiniteLevel(currentCustomer.xp || 50, currentCustomer.hoursPlayed || 0);
 const prepaidExp = currentCustomer.prepaidExpiresAt ? Math.max(0, Math.ceil((Number(currentCustomer.prepaidExpiresAt) - now) / 86400000)) : 0;
 return (
 <div className="max-w-4xl mx-auto py-6 space-y-5 text-xs">
@@ -1117,20 +1138,17 @@ return (
 <div className="flex items-center gap-4"><div className="w-16 h-16 rounded-2xl bg-amber-500/20 border-2 border-amber-500/40 flex items-center justify-center text-3xl overflow-hidden">{currentCustomer.avatarUrl ? <img src={currentCustomer.avatarUrl} className="w-full h-full object-cover" /> : lvl.badge}</div><div><h2 className="text-lg font-black text-white">{currentCustomer.name}</h2><span className="text-neutral-400 font-mono block">📱 {currentCustomer.phone} (المدير فقط يغيّر الرقم)</span><div className="flex flex-wrap gap-1.5 mt-1"><span className={"px-2.5 py-0.5 rounded-full font-black text-[10px] bg-black/60 border border-neutral-800 " + lvl.color}>Lvl {lvl.level} — {lvl.title}</span><span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-amber-500 text-black font-mono">💰 {currentCustomer.walletBalance || 0} ج</span>{Number(currentCustomer.prepaidHours || 0) > 0 && prepaidExp > 0 && <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-purple-600 text-white font-mono">⏳ {currentCustomer.prepaidHours}س ({prepaidExp} يوم)</span>}</div></div></div>
 <div className="flex flex-wrap gap-2"><button onClick={() => setShowTopup(true)} className="px-3.5 py-2 bg-emerald-500 text-black font-black rounded-xl">➕ اشحن رصيدك</button><button onClick={() => { setEdName(currentCustomer.name); setEdPass(currentCustomer.password || ''); setEdBirth(currentCustomer.birthDate || ''); setEdAva(null); setEdIdDoc(null); setShowEdit(true); }} className="px-3.5 py-2 bg-neutral-800 text-amber-300 rounded-xl font-bold">✏️ تعديل / توثيق</button><button onClick={() => { setCurrentCustomer(null); navigate('home'); }} className="px-3 py-2 bg-neutral-950 text-neutral-400 rounded-xl border border-neutral-800">خروج</button></div>
 </div>
-  <div className="p-4 bg-neutral-900 border border-neutral-800 rounded-3xl space-y-2"><div className="flex justify-between"><strong>🚀 مسار هدية الـ 24 ساعة (35 ج بموافقة المدير):</strong><span className="text-amber-400 font-mono font-bold">{Number(currentCustomer.hoursPlayed || 0).toFixed(1)} / 24 ساعة</span></div><div className="w-full h-3 bg-neutral-950 rounded-full border border-neutral-800 overflow-hidden"><div className="h-full bg-gradient-to-r from-amber-500 to-emerald-400" style={{ width: Math.min(100, ((currentCustomer.hoursPlayed || 0) / 24) * 100) + "%" }} /></div>{(currentCustomer.hoursPlayed || 0) >= 24 && <button disabled={busy} onClick={async () => { setBusy(true); try { const r = await submitGiftRequest({ customerPhone: currentCustomer.phone, customerName: currentCustomer.name, sourceType: 'hours_24', title: '🚀 مكافأة إتمام 24 ساعة لعب (35 ج)', rewardType: 'wallet', amount: 35 }); if (r.ok) { await db.collection('customers').doc(currentCustomer.phone).set({ hoursPlayed: firebase.firestore.FieldValue.increment(-24) }, { merge: true }); playNotificationSound('cash'); alert('تم إرسال طلب مكافأة الـ 35ج للمدير للموافقة وتحديد ميعادها!'); } } finally { setBusy(false); } }} className="w-full py-2 bg-emerald-500 text-black font-black rounded-xl">🎁 طلب صرف 35 ج من المدير</button>}</div>
+<div className="p-4 bg-neutral-900 border border-neutral-800 rounded-3xl space-y-2"><div className="flex justify-between"><strong>🚀 مسار هدية الـ 24 ساعة (35 ج بموافقة المدير):</strong><span className="text-amber-400 font-mono font-bold">{Number(currentCustomer.hoursPlayed || 0).toFixed(1)} / 24 ساعة</span></div><div className="w-full h-3 bg-neutral-950 rounded-full border border-neutral-800 overflow-hidden"><div className="h-full bg-gradient-to-r from-amber-500 to-emerald-400" style={{ width: Math.min(100, ((currentCustomer.hoursPlayed || 0) / 24) * 100) + "%" }} /></div>{(currentCustomer.hoursPlayed || 0) >= 24 && <button disabled={busy} onClick={async () => { setBusy(true); try { const r = await submitGiftRequest({ customerPhone: currentCustomer.phone, customerName: currentCustomer.name, sourceType: 'hours_24', title: '🚀 مكافأة إتمام 24 ساعة لعب (35 ج)', rewardType: 'wallet', amount: 35 }); if (r.ok) { await db.collection('customers').doc(currentCustomer.phone).set({ hoursPlayed: firebase.firestore.FieldValue.increment(-24) }, { merge: true }); playNotificationSound('cash'); alert('تم إرسال طلب مكافأة الـ 35ج للمدير للموافقة وتحديد ميعادها!'); } } finally { setBusy(false); } }} className="w-full py-2 bg-emerald-500 text-black font-black rounded-xl">🎁 طلب صرف 35 ج من المدير</button>}</div>
 {(gifts || []).length > 0 && <div className="bg-neutral-900 border border-emerald-500/30 p-5 rounded-3xl space-y-2"><h3 className="font-black text-emerald-400 text-sm">🎁 هداياي ومكافآتي (المعتمدة والمعلقة):</h3>{gifts.map(g => <div key={g.id} className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 flex justify-between items-center"><div><strong className="text-white block">{g.title}</strong>{g.scheduledDate && <span className="text-[10px] text-cyan-300 font-mono block">📅 الميعاد المحدد: {g.scheduledDate} {g.scheduledTime || ''}</span>}</div><span className="px-2.5 py-1 rounded-xl text-[10px] font-black bg-neutral-900 text-amber-400">{g.status === 'pending_admin' ? 'بانتظار المدير ⏳' : (g.status === 'approved_scheduled' ? 'معتمدة ✅' : (g.status === 'claimed' ? 'تم الصرف ✓' : 'مرفوضة'))}</span></div>)}</div>}
-  <div className="bg-neutral-900 border border-amber-500/30 p-5 rounded-3xl space-y-3"><h3 className="font-black text-amber-400 text-sm">🏆 الإنجازات ({(currentCustomer.claimedAchievements || []).length}/{ACHIEVEMENT_DEFS.length}):</h3><div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">{ACHIEVEMENT_DEFS.map(ach => { const claimed = (currentCustomer.claimedAchievements || []).includes(ach.id), unlocked = ach.check(currentCustomer, bookings); return (<div key={ach.id} className={"p-3 rounded-2xl border flex justify-between items-center gap-2 " + (claimed ? 'bg-emerald-500/10 border-emerald-500/30 opacity-80' : (unlocked ? 'bg-amber-500/15 border-amber-500' : 'bg-neutral-950 border-neutral-800'))}><div><strong className="text-white block">{ach.title}</strong><span className="text-[10px] text-neutral-400 block">{ach.desc}</span><span className="text-[10px] text-amber-300 font-bold">{ach.rewardLabel}</span></div>{claimed ? <span className="text-emerald-400 font-black text-[10px]">تم الطلب ✓</span> : (unlocked ? <button disabled={busy} onClick={() => requestAchGift(ach)} className="px-3 py-1.5 bg-amber-500 text-black font-black rounded-xl text-[10px]">طلب 🎁</button> : <span className="text-[10px] text-neutral-500">مغلق 🔒</span>)}</div>); })}</div></div>
+<div className="bg-neutral-900 border border-amber-500/30 p-5 rounded-3xl space-y-3"><h3 className="font-black text-amber-400 text-sm">🏆 الإنجازات ({(currentCustomer.claimedAchievements || []).length}/{ACHIEVEMENT_DEFS.length}):</h3><div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">{ACHIEVEMENT_DEFS.map(ach => { const claimed = (currentCustomer.claimedAchievements || []).includes(ach.id), unlocked = ach.check(currentCustomer, bookings); return (<div key={ach.id} className={"p-3 rounded-2xl border flex justify-between items-center gap-2 " + (claimed ? 'bg-emerald-500/10 border-emerald-500/30 opacity-80' : (unlocked ? 'bg-amber-500/15 border-amber-500' : 'bg-neutral-950 border-neutral-800'))}><div><strong className="text-white block">{ach.title}</strong><span className="text-[10px] text-neutral-400 block">{ach.desc}</span><span className="text-[10px] text-amber-300 font-bold">{ach.rewardLabel}</span></div>{claimed ? <span className="text-emerald-400 font-black text-[10px]">تم الطلب ✓</span> : (unlocked ? <button disabled={busy} onClick={() => requestAchGift(ach)} className="px-3 py-1.5 bg-amber-500 text-black font-black rounded-xl text-[10px]">طلب 🎁</button> : <span className="text-[10px] text-neutral-500">مغلق 🔒</span>)}</div>); })}</div></div>
 <div className="p-4 bg-gradient-to-r from-amber-500/15 to-neutral-900 border border-amber-500/30 rounded-3xl flex justify-between items-center"><div><strong className="text-white block">🎁 كود الإحالة: <span className="text-amber-400 font-mono">{currentCustomer.myReferralCode || 'TX-VIP'}</span></strong><span className="text-[10px] text-neutral-400">عند أول صديق جديد يتفعل بالكود بتطلبوا مكافأة 5ج بموافقة المدير!</span></div><button onClick={() => { navigator.clipboard.writeText(currentCustomer.myReferralCode || 'TX-VIP'); alert('تم النسخ!'); }} className="px-3 py-1.5 bg-neutral-800 text-white rounded-xl font-bold">📋 نسخ</button></div>
-<div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3"><h3 className="font-bold text-white text-sm">📅 حجوزاتك ({bookings.length}):</h3>{bookings.length === 0 ? <p className="text-neutral-500 text-center py-4">لا توجد حجوزات.</p> : bookings.map(b => { const ti = getBookingTimerInfo(b, now); return (<div key={b.id} className="p-3.5 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-2"><div className="flex justify-between items-center"><div><strong className="text-amber-400 font-mono">{b.ref}</strong> <span className="text-white">{b.devicesSummary}</span><span className="block text-[10px] text-neutral-400">{b.date} ({b.time}) | {b.snacksSummary}</span></div><div className="text-left">
-  <strong className="font-mono block">{b.totalCost} ج</strong><span className={"text-[10px] font-bold " + (b.status === 'confirmed' ? 'text-emerald-400' : (b.status === 'rejected' || b.status === 'cancelled_emergency' ? 'text-rose-400' : 'text-amber-400'))}>{b.status === 'confirmed' ? 'مؤكد ✅' : (b.status === 'cancelled_emergency' ? ("طوارئ (" + (b.emergencyUsedCost || 0) + "ج)") : (b.status === 'rejected' ? 'مرفوض ✕' : 'بانتظار المدير ⏳'))}</span></div></div>{(ti.state === 'running' || ti.state === 'paused') && <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-wrap justify-between items-center gap-2"><span className="font-mono font-black text-amber-300">⏳ {Math.floor(ti.remainingSec/60)}:{String(ti.remainingSec%60).padStart(2,'0')}</span><div className="flex gap-1.5"><button onClick={() => handleRequestSmartExtension(b)} className="px-2.5 py-1 bg-amber-500 text-black font-black rounded-lg text-[10px]">+ تمديد 30د</button><button onClick={() => handleEmergencyCancel(b)} className="px-2.5 py-1 bg-rose-600 text-white font-black rounded-lg text-[10px]">⚠️ إلغاء طارئ</button></div></div>}<div className="flex flex-wrap gap-2">{b.status === 'confirmed' && ti.state === 'scheduled' && <button onClick={() => setOnTheWayTarget(b)} className="px-3 py-1.5 bg-amber-500 text-black rounded-xl text-[10px] font-black">🚗 أنا في الطريق{b.onTheWayEta ? (" (" + b.onTheWayEta + "د)") : ''}</button>}<a href={"https://wa.me/" + config.whatsappNumber + "?text=" + encodeURIComponent("بخصوص حجز " + b.ref + " (" + b.date + " " + b.time + ")")} target="_blank" className="px-3 py-1.5 bg-emerald-600/20 text-emerald-300 rounded-xl text-[10px] font-bold">💬 واتساب</a><a href={config.mapsUrl} target="_blank" className="px-3 py-1.5 bg-neutral-800 text-amber-300 rounded-xl text-[10px] font-bold">📍 الخريطة</a></div></div>); })}</div>
-{showEdit && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"><form onSubmit={e => { e.preventDefault(); if (edPass.trim().length < 4) return alert('الرقم السري 4+ حروف.'); if (!currentCustomer.birthVerified && edBirth && !edIdDoc && !currentCustomer.idCardImage) return alert('أرفق صورة البطاقة/شهادة الميلاد لتوثيق عيد الميلاد!'); const u = { name: edName.trim(), password: edPass.trim() }; if (edAva) u.avatarUrl = edAva; if (!currentCustomer.birthVerified && edBirth) { u.birthDate = edBirth; if (edIdDoc) u.idCardImage = edIdDoc; u.birthDocPending = true; } db.collection('customers').doc(currentCustomer.phone).set(u, { merge: true }); setShowEdit(false); alert('تم التحديث!'); }} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-3"><div className="flex justify-between"><h3 className="font-bold text-white">✏️ تعديل بياناتي (الرقم محمي للمدير فقط)</h3><button type="button" onClick={() => setShowEdit(false)}>✕</button></div><input required value={edName} onChange={e => setEdName(e.target.value)} 
-  className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><input required value={edPass} onChange={e => setEdPass(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><FilePickerButton onPick={setEdAva} label={edAva ? '✓ صورة شخصية جديدة' : '🖼️ تغيير الصورة الشخصية'} />{!currentCustomer.birthVerified ? <div className="p-2.5 bg-neutral-950 rounded-xl border border-neutral-800 space-y-2"><span className="text-[10px] text-pink-300 block">🎂 توثيق عيد الميلاد (اختياري):</span><input type="date" value={edBirth} onChange={e => setEdBirth(e.target.value)} className="w-full bg-neutral-900 rounded-xl p-2 text-white font-mono text-[10px]" /><FilePickerButton onPick={setEdIdDoc} label={edIdDoc ? '✓ تم إرفاق الوثيقة' : '🪪 صورة بطاقة / شهادة ميلاد'} /></div> : <span className="text-[10px] text-emerald-400 block">✓ عيد الميلاد موثق ({currentCustomer.birthDate}) ولا يمكن تغييره.</span>}<button className="w-full py-2.5 bg-amber-500 text-black font-black rounded-xl">حفظ</button></form></div>}
-{showTopup && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"><form onSubmit={e => { e.preventDefault(); if (!topRec || !validateEgyptianPhone(topPh)) return alert('أرفق السكرين ورقم المحول منه.'); db.collection('wallet_requests').doc("top-" + Date.now()).set({ id: "top-" + Date.now(), customerName: currentCustomer.name, customerPhone: currentCustomer.phone, amount: Number(topAmt), senderPhone: topPh.trim(), senderName: topNm.trim() || currentCustomer.name, receiptImage: topRec, status: 'pending', createdAt: new Date().toISOString() }).then(() => { setShowTopup(false); setTopRec(null); playNotificationSound('cash'); alert('تم إرسال طلب الشحن لموافقة المدير!'); }); }} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-3"><div className="flex justify-between"><h3 className="font-bold text-white">➕ شحن المحفظة</h3><button type="button" onClick={() => setShowTopup(false)}>✕</button></div><input type="number" min={20} required value={topAmt} onChange={e => setTopAmt(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-center font-mono font-bold text-white" /><div className="bg-neutral-950 p-2.5 rounded-xl border border-neutral-800 space-y-1 text-[10px]"><span className="text-neutral-400 block">حول لأحد الأرقام الرسمية:</span>{walletMap.map(w => <div key={w.id} className="flex justify-between"><span>{w.name}:</span><strong className="text-amber-400 font-mono">{w.num}</strong></div>)}</div><input required type="tel" value={topPh} onChange={e => setTopPh(e.target.value)} placeholder="رقم المحول منه" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white font-mono text-left" /><input required value={topNm} onChange={e => setTopNm(e.target.value)} 
-  placeholder="التحويل باسم مين؟" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white" /><FilePickerButton onPick={setTopRec} label={topRec ? '🔄 تغيير السكرين' : '📸 رفع سكرين التحويل *'} />{topRec && <img src={topRec} className="max-h-20 mx-auto rounded-lg" />}<button className="w-full py-2.5 bg-emerald-500 text-black font-black rounded-xl">إرسال للمدير ➔</button></form></div>}
+<div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3"><h3 className="font-bold text-white text-sm">📅 حجوزاتك ({bookings.length}):</h3>{bookings.length === 0 ? <p className="text-neutral-500 text-center py-4">لا توجد حجوزات.</p> : bookings.map(b => { const ti = getBookingTimerInfo(b, now); return (<div key={b.id} className="p-3.5 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-2"><div className="flex justify-between items-center"><div><strong className="text-amber-400 font-mono">{b.ref}</strong> <span className="text-white">{b.devicesSummary}</span><span className="block text-[10px] text-neutral-400">{b.date} ({b.time}) | {b.snacksSummary}</span></div><div className="text-left"><strong className="font-mono block">{b.totalCost} ج</strong><span className={"text-[10px] font-bold " + (b.status === 'confirmed' ? 'text-emerald-400' : (b.status === 'rejected' || b.status === 'cancelled_emergency' ? 'text-rose-400' : 'text-amber-400'))}>{b.status === 'confirmed' ? 'مؤكد ✅' : (b.status === 'cancelled_emergency' ? ("طوارئ (" + (b.emergencyUsedCost || 0) + "ج)") : (b.status === 'rejected' ? 'مرفوض ✕' : 'بانتظار المدير ⏳'))}</span></div></div>{(ti.state === 'running' || ti.state === 'paused') && <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-wrap justify-between items-center gap-2"><span className="font-mono font-black text-amber-300">⏳ {Math.floor(ti.remainingSec/60)}:{String(ti.remainingSec%60).padStart(2,'0')}</span><div className="flex gap-1.5"><button onClick={() => handleRequestSmartExtension(b)} className="px-2.5 py-1 bg-amber-500 text-black font-black rounded-lg text-[10px]">+ تمديد 30د</button><button onClick={() => handleEmergencyCancel(b)} className="px-2.5 py-1 bg-rose-600 text-white font-black rounded-lg text-[10px]">⚠️ إلغاء طارئ</button></div></div>}<div className="flex flex-wrap gap-2">{b.status === 'confirmed' && ti.state === 'scheduled' && <button onClick={() => setOnTheWayTarget(b)} className="px-3 py-1.5 bg-amber-500 text-black rounded-xl text-[10px] font-black">🚗 أنا في الطريق{b.onTheWayEta ? (" (" + b.onTheWayEta + "د)") : ''}</button>}<a href={"https://wa.me/" + config.whatsappNumber + "?text=" + encodeURIComponent("بخصوص حجز " + b.ref + " (" + b.date + " " + b.time + ")")} target="_blank" className="px-3 py-1.5 bg-emerald-600/20 text-emerald-300 rounded-xl text-[10px] font-bold">💬 واتساب</a><a href={config.mapsUrl} target="_blank" className="px-3 py-1.5 bg-neutral-800 text-amber-300 rounded-xl text-[10px] font-bold">📍 الخريطة</a></div></div>); })}</div>
+{showEdit && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"><form onSubmit={e => { e.preventDefault(); if (edPass.trim().length < 4) return alert('الرقم السري 4+ حروف.'); if (!currentCustomer.birthVerified && edBirth && !edIdDoc && !currentCustomer.idCardImage) return alert('أرفق صورة البطاقة/شهادة الميلاد لتوثيق عيد الميلاد!'); const u = { name: edName.trim(), password: edPass.trim() }; if (edAva) u.avatarUrl = edAva; if (!currentCustomer.birthVerified && edBirth) { u.birthDate = edBirth; if (edIdDoc) u.idCardImage = edIdDoc; u.birthDocPending = true; } db.collection('customers').doc(currentCustomer.phone).set(u, { merge: true }); setShowEdit(false); alert('تم التحديث!'); }} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-3"><div className="flex justify-between"><h3 className="font-bold text-white">✏️ تعديل بياناتي (الرقم محمي للمدير فقط)</h3><button type="button" onClick={() => setShowEdit(false)}>✕</button></div><input required value={edName} onChange={e => setEdName(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><input required value={edPass} onChange={e => setEdPass(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><FilePickerButton onPick={setEdAva} label={edAva ? '✓ صورة شخصية جديدة' : '🖼️ تغيير الصورة الشخصية'} />{!currentCustomer.birthVerified ? <div className="p-2.5 bg-neutral-950 rounded-xl border border-neutral-800 space-y-2"><span className="text-[10px] text-pink-300 block">🎂 توثيق عيد الميلاد (اختياري):</span><input type="date" value={edBirth} onChange={e => setEdBirth(e.target.value)} className="w-full bg-neutral-900 rounded-xl p-2 text-white font-mono text-[10px]" /><FilePickerButton onPick={setEdIdDoc} label={edIdDoc ? '✓ تم إرفاق الوثيقة' : '🪪 صورة بطاقة / شهادة ميلاد'} /></div> : <span className="text-[10px] text-emerald-400 block">✓ عيد الميلاد موثق ({currentCustomer.birthDate}) ولا يمكن تغييره.</span>}<button className="w-full py-2.5 bg-amber-500 text-black font-black rounded-xl">حفظ</button></form></div>}
+{showTopup && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"><form onSubmit={e => { e.preventDefault(); if (!topRec || !validateEgyptianPhone(topPh)) return alert('أرفق السكرين ورقم المحول منه.'); db.collection('wallet_requests').doc("top-" + Date.now()).set({ id: "top-" + Date.now(), customerName: currentCustomer.name, customerPhone: currentCustomer.phone, amount: Number(topAmt), senderPhone: topPh.trim(), senderName: topNm.trim() || currentCustomer.name, receiptImage: topRec, status: 'pending', createdAt: new Date().toISOString() }).then(() => { setShowTopup(false); setTopRec(null); playNotificationSound('cash'); alert('تم إرسال طلب الشحن لموافقة المدير!'); }); }} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-3"><div className="flex justify-between"><h3 className="font-bold text-white">➕ شحن المحفظة</h3><button type="button" onClick={() => setShowTopup(false)}>✕</button></div><input type="number" min={20} required value={topAmt} onChange={e => setTopAmt(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-center font-mono font-bold text-white" /><div className="bg-neutral-950 p-2.5 rounded-xl border border-neutral-800 space-y-1 text-[10px]"><span className="text-neutral-400 block">حول لأحد الأرقام الرسمية:</span>{walletMap.map(w => <div key={w.id} className="flex justify-between"><span>{w.name}:</span><strong className="text-amber-400 font-mono">{w.num}</strong></div>)}</div><input required type="tel" value={topPh} onChange={e => setTopPh(e.target.value)} placeholder="رقم المحول منه" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white font-mono text-left" /><input required value={topNm} onChange={e => setTopNm(e.target.value)} placeholder="التحويل باسم مين؟" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white" /><FilePickerButton onPick={setTopRec} label={topRec ? '🔄 تغيير السكرين' : '📸 رفع سكرين التحويل *'} />{topRec && <img src={topRec} className="max-h-20 mx-auto rounded-lg" />}<button className="w-full py-2.5 bg-emerald-500 text-black font-black rounded-xl">إرسال للمدير ➔</button></form></div>}
 </div>
 );
-}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
-function SettingsPage({ custSettings, setCustSettings, currentCustomer, setCurrentCustomer, config, navigate }) {
+  }
+  function SettingsPage({ custSettings, setCustSettings, currentCustomer, setCurrentCustomer, config, navigate }) {
 const isEn = custSettings.lang === 'en'; const [newPass, setNewPass] = useState(''); const [confPass, setConfPass] = useState(''); const [busy, setBusy] = useState(false);
 const upd = (k, v) => setCustSettings(p => ({ ...p, [k]: v }));
 const saveNewPassword = async (e) => {
@@ -1180,7 +1198,7 @@ mrRef.current = mr; setRec(true); mr.start(); setTimeout(() => { if (mr.state ==
 };
 return <button type="button" onClick={toggle} disabled={disabled} className={"px-2.5 py-1.5 rounded-xl font-black text-xs " + (rec ? 'bg-rose-600 text-white animate-pulse' : 'bg-neutral-800 text-amber-300')}>{rec ? '⏹️' : '🎤'}</button>;
 }
-function GamingAIAssistant({ config, pricing, devices, snacksMenu, offers, tournaments, currentCustomer, myBookings, myGifts, setMyBookings, aiBookingDraft, setAiBookingDraft, aiMemory }) {
+  function GamingAIAssistant({ config, pricing, devices, snacksMenu, offers, tournaments, currentCustomer, myBookings, myGifts, setMyBookings, aiBookingDraft, setAiBookingDraft, aiMemory }) {
 const [panelMode, setPanelMode] = useState(null); const [guideTab, setGuideTab] = useState('fifa');
 const [threads, setThreads] = useState(() => safeJSONParse('twix_cust_ai_threads', [{ id: 't1', title: 'محادثة جديدة', msgs: [{ sender: 'ai', text: 'أهلاً بك يا بطل في TWIX 🎮 اسألني عن أي لعبة أو عروض النهاردة أو احجز بصوتك!' }] }]));
 const [activeTid, setActiveTid] = useState(() => threads[0]?.id || 't1'); const [showHist, setShowHist] = useState(false);
@@ -1238,11 +1256,11 @@ return (
 <form onSubmit={e => { e.preventDefault(); sendToAI(); }} className="flex gap-1 items-center"><input disabled={isLoading} value={aiQuery} onChange={e => setAiQuery(e.target.value)} placeholder="اسأل عن العروض، الألعاب، أو احجز..." className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-2.5 py-1.5 text-white text-[11px]" /><FilePickerButton onPick={b => { if (!currentCustomer) return alert('سجل دخولك لإرسال الصور.'); setAiImg(b); }} label="📷" className="px-2 py-1.5 bg-neutral-800 text-cyan-300 rounded-xl font-bold" /><VoiceMicButton disabled={isLoading} onTranscript={t => sendToAI({ text: t })} onAudioData={a => sendToAI({ audioBase64: a })} /><button disabled={isLoading} className="px-2.5 py-1.5 bg-amber-500 text-black font-black rounded-xl">إرسال</button></form>
 </div>
 ) : (
-  <div className="bg-neutral-900 border border-amber-500/40 rounded-3xl p-4 w-80 sm:w-96 space-y-3 shadow-2xl"><div className="flex justify-between items-center border-b border-neutral-800 pb-2"><span className="text-amber-400 font-black">🎮 دليل أزرار الذراع</span><div className="flex gap-2"><button onClick={() => setPanelMode('ai')} className="text-[10px] bg-amber-500 text-black font-bold px-2 py-0.5 rounded-lg">🤖 AI</button><button onClick={() => setPanelMode(null)} className="text-neutral-400 font-bold">✕</button></div></div><div className="flex flex-wrap gap-1">{Object.keys(CONTROLLER_GUIDES).map(k => <button key={k} onClick={() => setGuideTab(k)} className={"px-2 py-1 rounded-xl text-[10px] font-bold " + (guideTab === k ? 'bg-amber-500 text-black' : 'bg-neutral-950 text-neutral-300 border border-neutral-800')}>{CONTROLLER_GUIDES[k].title}</button>)}</div><div className="h-48 overflow-y-auto space-y-1.5 p-2 bg-neutral-950 rounded-2xl border border-neutral-800 no-scrollbar">{CONTROLLER_GUIDES[guideTab].buttons.map((b, i) => <div key={i} className="p-2 bg-neutral-900 rounded-xl border border-neutral-800 flex items-start gap-2 text-[11px]"><span className="bg-amber-500/20 text-amber-300 font-black px-2 py-0.5 rounded font-mono whitespace-nowrap">{b.btn}</span><span>{b.desc}</span></div>)}</div></div>
+<div className="bg-neutral-900 border border-amber-500/40 rounded-3xl p-4 w-80 sm:w-96 space-y-3 shadow-2xl"><div className="flex justify-between items-center border-b border-neutral-800 pb-2"><span className="text-amber-400 font-black">🎮 دليل أزرار الذراع</span><div className="flex gap-2"><button onClick={() => setPanelMode('ai')} className="text-[10px] bg-amber-500 text-black font-bold px-2 py-0.5 rounded-lg">🤖 AI</button><button onClick={() => setPanelMode(null)} className="text-neutral-400 font-bold">✕</button></div></div><div className="flex flex-wrap gap-1">{Object.keys(CONTROLLER_GUIDES).map(k => <button key={k} onClick={() => setGuideTab(k)} className={"px-2 py-1 rounded-xl text-[10px] font-bold " + (guideTab === k ? 'bg-amber-500 text-black' : 'bg-neutral-950 text-neutral-300 border border-neutral-800')}>{CONTROLLER_GUIDES[k].title}</button>)}</div><div className="h-48 overflow-y-auto space-y-1.5 p-2 bg-neutral-950 rounded-2xl border border-neutral-800 no-scrollbar">{CONTROLLER_GUIDES[guideTab].buttons.map((b, i) => <div key={i} className="p-2 bg-neutral-900 rounded-xl border border-neutral-800 flex items-start gap-2 text-[11px]"><span className="bg-amber-500/20 text-amber-300 font-black px-2 py-0.5 rounded font-mono whitespace-nowrap">{b.btn}</span><span>{b.desc}</span></div>)}</div></div>
 )}
 </div>
 );
-}
+  }
   function AdminPage({ adminShift, setAdminShift, config, pricing, devices, busyCount, snacksMenu, matches, challenges, tournaments, hallRecords, reviews, memories, globalFrozen, offers, aiPilotMode, setAiPilotMode, now }) {
 const [inputPin, setInputPin] = useState(''); const [pinError, setPinError] = useState(false); const [shiftHashes, setShiftHashes] = useState(DEFAULT_SHIFT_HASHES);
 const [adminSecret, setAdminSecret] = useState(() => sessionStorage.getItem('twix_admin_ai_secret') || '');
@@ -1292,7 +1310,7 @@ seenCountsRef.current = { pB, pT, pW, pG };
 allBookings.forEach(b => { const ti = getBookingTimerInfo(b, now); if (ti.state === 'ended' && !alarmedRef.current[b.id]) { alarmedRef.current[b.id] = true; playNotificationSound('alarm'); triggerBrowserNotification('⏰ انتهى وقت حجز!', b.ref + " - " + b.customerName); } });
 sessions.forEach(s => { if (s.targetMins) { const sec = Math.floor((now - new Date(s.startTime).getTime()) / 1000); if (sec >= s.targetMins * 60 && !alarmedRef.current[s.id]) { alarmedRef.current[s.id] = true; playNotificationSound('alarm'); triggerBrowserNotification('⏰ انتهى وقت جلسة صالة!', s.devName); } } });
 }, [now, allBookings, inLoungeRequests, walletRequests, allGifts, sessions, adminShift]);
-const updateCustomerPhoneAndMigrate = async (oldPhone, newPhone, extraFields = {}) => {
+    const updateCustomerPhoneAndMigrate = async (oldPhone, newPhone, extraFields = {}) => {
 const oldPh = oldPhone.trim(), newPh = newPhone.trim();
 if (!validateEgyptianPhone(newPh)) throw new Error('رقم الهاتف الجديد غير صحيح.');
 if (oldPh === newPh) { await db.collection('customers').doc(oldPh).set(extraFields, { merge: true }); return; }
@@ -1309,7 +1327,7 @@ for (const d of gS.docs) await d.ref.update({ customerPhone: newPh });
 await db.collection('customers').doc(oldPh).delete();
 logSystemEvent(adminShift, 'CHANGE_CUST_PHONE', oldPh + " -> " + newPh);
 };
-  const buildSmartAdminContext = () => {
+const buildSmartAdminContext = () => {
 const dailyStats = {};
 const ensure = (d) => { if (!dailyStats[d]) dailyStats[d] = { inStoreCash: 0, onlineCash: 0, walletSpent: 0, expenses: 0, visits: 0 }; };
 completedSales.forEach(s => { const d = s.date || todayStr; ensure(d); dailyStats[d].inStoreCash += Number(s.totalCost || 0); dailyStats[d].visits += 1; });
@@ -1338,8 +1356,7 @@ customersDirectory: allCustomers.map(c => ({ name: c.name, phone: c.phone, statu
 aiMemoryLessons: aiMemory.slice(0, 15).map(m => m.lesson)
 };
 };
-
-    const confirmBookingByAdmin = async (b) => {
+const confirmBookingByAdmin = async (b) => {
 const mins = Number(b.duration || 30), xpAdd = Math.round(mins * 1.5), hrsAdd = Number((mins / 60).toFixed(2)), mKey = getCairoMonthKey();
 if (!b.rewardedStats && b.phone) {
 const cRef = db.collection('customers').doc(b.phone);
@@ -1367,7 +1384,7 @@ await db.runTransaction(async tx => { const s = await tx.get(invRef); if (s.exis
 }
 logSystemEvent(adminShift, 'REJECT_BOOKING', b.ref);
 };
-const approveGiftWithSchedule = async (g, sDate, sTime, vDays = 7) => {
+    const approveGiftWithSchedule = async (g, sDate, sTime, vDays = 7) => {
 if (!sDate) return alert('حدد تاريخ استلام الهدية أولاً!');
 const exp = Date.now() + Number(vDays || 7) * 86400000, gRef = db.collection('gifts').doc(g.id);
 await db.runTransaction(async tx => {
@@ -1383,7 +1400,7 @@ else tx.update(cRef, { xp: Number(cs.data().xp || 0) + Number(g.amount) });
 });
 logSystemEvent(adminShift, 'APPROVE_GIFT', g.customerPhone + " | " + g.title + " (" + sDate + ")"); playNotificationSound('cash');
 };
-    const approveCustomerAccount = async (c) => {
+const approveCustomerAccount = async (c) => {
 if (!c || busyBtn) return; setBusyBtn(true);
 try {
 await db.collection('customers').doc(c.id || c.phone).set({ status: 'active' }, { merge: true });
@@ -1425,7 +1442,7 @@ tx.update(cRef, { walletBalance: Number(cs.data().walletBalance || 0) + Number(w
 });
 logSystemEvent(adminShift, 'APPROVE_WALLET', w.customerPhone + ": +" + w.amount + "ج"); playNotificationSound('cash');
 };
-const resolveTableReq = async (r, approveRefund = false) => {
+    const resolveTableReq = async (r, approveRefund = false) => {
 if (r.type === 'extend' && r.bookingId) { const bk = allBookings.find(x => x.id === r.bookingId); if (bk) await controlBookingTimer(bk, 'adjust', Number(r.addMins || 30), true); }
 else if (r.type === 'cafeteria_order' && Array.isArray(r.snackItems)) {
 const invRef = db.collection('inventory').doc('snacks');
@@ -1460,7 +1477,7 @@ if (addFee && deltaMins > 0) { const dt = b.bookedDevices?.[0]?.type || ((b.devi
 } else if (action === 'finish') upd.timerStatus = 'finished';
 await db.collection('bookings').doc(b.id).update(upd); logSystemEvent(adminShift, "TIMER_" + action.toUpperCase(), b.ref); playNotificationSound('click');
 };
-  const executeAIActions = async (actions = []) => {
+const executeAIActions = async (actions = []) => {
 const res = [];
 const findC = (p) => { const ph = String(p.phone || p.customerPhone || '').replace(/^\+2/, '').replace(/\s+/g, '').trim(); return (ph && allCustomers.find(c => c.phone === ph)) || (p.customerName && allCustomers.find(c => (c.name || '').includes(p.customerName.trim()))) || null; };
 const findS = (p) => sessions.find(s => s.id === p.sessionId || s.deviceId === p.deviceId || (p.devName && s.devName.includes(p.devName)) || (p.customerName && (s.customerName || '').includes(p.customerName)));
@@ -1476,103 +1493,15 @@ if (t === 'ADD_SNACK' && p.name) nxt.push({ id: "snk-" + Date.now(), name: p.nam
 else if (t === 'DELETE_SNACK') nxt = nxt.filter(s => s.id !== p.snackId && !s.name.includes(p.name || '---'));
 else nxt = nxt.map(s => (s.id === p.snackId || (p.name && s.name.includes(p.name))) ? { ...s, price: p.price ?? s.price, costPrice: p.costPrice ?? s.costPrice, stock: p.stock ?? s.stock, available: p.available ?? s.available } : s);
 await db.collection('inventory').doc('snacks').set({ menu: nxt }); res.push("✅ الكافتيريا");
-} else if (t === 'ADD_DEVICE' || t === 'UPDATE_DEVICE' || t === 'DELETE_DEVICE' || t === 'SET_DEVICE_GAMES') {
-if (t === 'ADD_DEVICE' && p.name) { const id = "d-" + Date.now(); await db.collection('devices').doc(id).set({ id, name: p.name, type: p.type || 'PS5', zone: p.zone || 'VIP', status: 'available', games: Array.isArray(p.games) ? p.games : [] }); }
-else { const dev = devices.find(d => d.id === p.deviceId || (p.name && d.name.includes(p.name))); if (dev) { if (t === 'DELETE_DEVICE') await db.collection('devices').doc(dev.id).delete(); else if (t === 'SET_DEVICE_GAMES') await db.collection('devices').doc(dev.id).update({ games: Array.isArray(p.games) ? p.games : [] }); else await db.collection('devices').doc(dev.id).update({ name: p.name ?? dev.name, type: p.type ?? dev.type, zone: p.zone ?? dev.zone, status: p.status ?? dev.status, games: p.games ?? dev.games }); } }
-res.push("✅ الأجهزة والألعاب");
-} else if (t === 'PUBLISH_OFFER' && p.title) {
-const id = "off-" + Date.now(), hrs = p.durationHours ? Number(p.durationHours) : (p.durationDays ? Number(p.durationDays) * 24 : 0);
-await db.collection('offers').doc(id).set({ id, title: p.title, detail: p.detail || '', price: Number(p.price || 100), oldPrice: Number(p.oldPrice || 0), deviceType: p.deviceType || 'PS5', mode: p.mode || 'single', duration: Number(p.duration || 60), expiresAt: hrs > 0 ? Date.now() + hrs * 3600000 : null, date: todayStr, createdAt: new Date().toISOString() });
-if (p.sendPush && adminSecret) fetch(AI_WORKER_URL + "/send-notification", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, title: p.title, message: p.detail || p.title, url: window.location.origin + window.location.pathname + "?offer=" + id + "#booking" }) }).catch(() => {});
-res.push("✅ نشر عرض: " + p.title);
-} else if (t === 'DELETE_OFFER') {
-const tgs = p.all ? offers : offers.filter(o => o.id === p.offerId || (p.title && o.title.includes(p.title)));
-for (const tg of tgs) await db.collection('offers').doc(tg.id).delete(); res.push("✅ مسح عروض (" + tgs.length + ")");
-} else if (t === 'TOGGLE_HAPPY_HOUR') {
-await db.collection('site_settings').doc('config').set({ happyHour: { active: !!p.active, discountPercent: Number(p.discountPercent ?? config.happyHour?.discountPercent ?? 15), startHour: Number(p.startHour ?? config.happyHour?.startHour ?? 12), endHour: Number(p.endHour ?? config.happyHour?.endHour ?? 16) } }, { merge: true }); res.push("✅ Happy Hour");
-} else if (t === 'CREATE_CUSTOMER' && p.phone) {
-const ph = String(p.phone).trim(); if (!validateEgyptianPhone(ph)) res.push("❌ رقم مصري غير صحيح");
-else { await db.collection('customers').doc(ph).set({ name: p.name || 'لاعب', phone: ph, password: p.password || '123456', walletBalance: Number(p.walletBalance || 0), prepaidHours: 0, xp: 100, hoursPlayed: 0, trustScore: 80, rewards: [], claimedAchievements: [], incidents: [], usedPromos: [], status: 'active', myReferralCode: "TX-" + ph.slice(-4), createdAt: new Date().toISOString() }); res.push("✅ إنشاء حساب " + ph); }
-} else if (t === 'CASH_TOPUP') {
-const tc = findC(p), amt = Number(p.amount || 0);
-if (tc && amt > 0) { await db.collection('customers').doc(tc.phone).set({ walletBalance: firebase.firestore.FieldValue.increment(amt) }, { merge: true }); await db.collection('sales').doc("top-" + Date.now()).set({ id: "top-" + Date.now(), devName: 'شحن كاش AI', customerName: tc.name, totalCost: amt, source: 'in_store', shiftId: adminShift, date: todayStr, createdAt: new Date().toISOString() }); res.push("✅ شحن كاش " + amt + "ج"); }
-} else if (t === 'VERIFY_BIRTHDAY') {
-const tc = findC(p); if (tc) { await db.collection('customers').doc(tc.phone).update(p.approved === false ? { birthDate: '', idCardImage: null, birthVerified: false, birthDocPending: false } : { birthVerified: true, birthDocPending: false }); res.push("✅ توثيق ميلاد " + tc.name); }
-} else if (t === 'EDIT_CUSTOMER' || t === 'ADJUST_WALLET' || t === 'APPROVE_CUSTOMER') {
-const tc = findC(p);
-if (!tc) res.push("❌ العميل غير موجود");
-else if (t === 'APPROVE_CUSTOMER') { await approveCustomerAccount(tc); res.push("✅ تفعيل " + tc.name); }
-else {
-const upd = {}; if (p.name) upd.name = p.name; if (p.password) upd.password = p.password; if (p.status) upd.status = p.status;
-if (p.trustScore !== undefined) { upd.trustScore = Number(p.trustScore); upd.trustNote = p.trustNote || ''; }
-if (p.birthVerified !== undefined) { upd.birthVerified = !!p.birthVerified; upd.birthDocPending = false; }
-if (p.walletDelta ?? p.delta ?? p.amount) upd.walletBalance = Math.max(0, Number(tc.walletBalance || 0) + Number(p.walletDelta ?? p.delta ?? p.amount));
-if (p.prepaidHoursDelta) { upd.prepaidHours = Math.max(0, Number(tc.prepaidHours || 0) + Number(p.prepaidHoursDelta)); upd.prepaidDeviceType = p.prepaidDeviceType || 'PS5'; upd.prepaidExpiresAt = Date.now() + 30 * 86400000; }
-if (p.newPhone && p.newPhone !== tc.phone) await updateCustomerPhoneAndMigrate(tc.phone, p.newPhone, upd);
-else await db.collection('customers').doc(tc.phone).set(upd, { merge: true });
-res.push("✅ تحديث " + tc.name);
+} else if (t === 'APPROVE_CUSTOMER') {
+const tc = findC(p); if (tc) { await approveCustomerAccount(tc); res.push("✅ تفعيل " + tc.name); }
 }
-} else if (t === 'APPROVE_WALLET_REQUEST' || t === 'REJECT_WALLET_REQUEST') {
-const w = walletRequests.find(x => x.id === p.requestId || (x.status === 'pending' && x.customerPhone === p.customerPhone));
-if (w) { if (t === 'APPROVE_WALLET_REQUEST') await approveWalletReq(w); else await db.collection('wallet_requests').doc(w.id).update({ status: 'rejected' }); res.push("✅ طلب شحن"); }
-} else if (t === 'RESOLVE_TABLE_REQUEST') {
-const r = inLoungeRequests.find(x => x.id === p.requestId || x.status !== 'done'); if (r) { await resolveTableReq(r, true); res.push("✅ تنفيذ طلب"); }
-} else if (t === 'EDIT_BOOKING' || t === 'CANCEL_BOOKING' || t === 'CONTROL_TIMER') {
-const bk = allBookings.find(b => b.id === p.bookingId || b.ref === p.ref || (p.customerName && (b.customerName || '').includes(p.customerName) && ['awaiting_admin_approval','confirmed'].includes(b.status)) || (p.phone && b.phone === p.phone && ['awaiting_admin_approval','confirmed'].includes(b.status)));
-if (!bk) res.push("❌ الحجز غير موجود");
-else if (t === 'CONTROL_TIMER') { await controlBookingTimer(bk, p.action, Number(p.deltaMins || 0), !!p.addFee); res.push("✅ عداد " + bk.ref); }
-else if (t === 'CANCEL_BOOKING' || p.status === 'rejected' || p.status === 'cancelled') { await rejectBookingByAdmin(bk); res.push("✅ إلغاء الحجز وإرجاع الرصيد/المخزون: " + bk.ref); }
-else if (p.status === 'confirmed') { await confirmBookingByAdmin(bk); res.push("✅ تأكيد " + bk.ref); }
-else { await db.collection('bookings').doc(bk.id).update(Object.fromEntries(Object.entries(p).filter(([k]) => ['date','time','duration','totalCost','status','incidentNote'].includes(k)))); res.push("✅ تعديل " + bk.ref); }
-} else if (t === 'START_SESSION') {
-const dev = devices.find(d => (d.id === p.deviceId || (p.name && d.name.includes(p.name))) && d.status === 'available') || devices.find(d => d.status === 'available');
-if (dev) { const sid = "ses-" + Date.now(); await db.collection('sessions').doc(sid).set({ id: sid, deviceId: dev.id, devName: dev.name, devType: dev.type, customerName: p.customerName || 'زبون صالة', customerPhone: p.customerPhone || '', mode: p.mode || 'single', targetMins: p.targetMins || null, startTime: new Date().toISOString(), snacksCost: 0, snackItems: [], shiftId: adminShift, source: 'in_store' }); await db.collection('devices').doc(dev.id).update({ status: 'busy' }); res.push("✅ بدء " + dev.name); }
-} else if (t === 'CONTROL_SESSION' || t === 'ADD_SESSION_SNACK' || t === 'FINISH_SESSION') {
-const ses = findS(p);
-if (!ses) res.push("❌ الجلسة غير موجودة");
-else if (t === 'ADD_SESSION_SNACK') { const sn = snacksMenu.find(x => x.id === p.snackId || (p.name && x.name.includes(p.name))); if (sn) { addSnackToSes(ses, sn.id); res.push("✅ إضافة " + sn.name); } }
-else if (t === 'CONTROL_SESSION') {
-if (p.action === 'pause') await db.collection('sessions').doc(ses.id).update({ isPaused: true, pausedAtMs: Date.now() });
-else if (p.action === 'resume') await db.collection('sessions').doc(ses.id).update({ isPaused: false, pausedAtMs: null, pausedTotalSec: Number(ses.pausedTotalSec || 0) + Math.floor((Date.now() - (ses.pausedAtMs || Date.now())) / 1000) });
-else if (p.action === 'switch_mode') await db.collection('sessions').doc(ses.id).update({ mode: ses.mode === 'multi' ? 'single' : 'multi' });
-res.push("✅ تحديث جلسة");
-} else {
-const pSec = Number(ses.pausedTotalSec || 0) + (ses.isPaused && ses.pausedAtMs ? Math.floor((Date.now() - ses.pausedAtMs) / 1000) : 0);
-const mins = Math.max(1, Math.ceil((Math.max(0, Math.floor((Date.now() - new Date(ses.startTime).getTime()) / 1000) - pSec)) / 60));
-const tCost = calcDevicePrice(pricing, ses.devType, ses.mode, mins, config.graceMinutes || 5);
-await finishSes(ses, tCost + (ses.snacksCost || 0), mins, p.controllersCheck || 'سليمة', Number(p.damageFee || 0), !!p.payWallet);
-res.push("✅ تقفيل وبون " + ses.devName);
-}
-} else if (t === 'APPROVE_GIFT' || t === 'REJECT_GIFT') {
-const g = allGifts.find(x => x.id === p.giftId || x.status === 'pending_admin');
-if (g) { if (t === 'APPROVE_GIFT') await approveGiftWithSchedule(g, p.scheduledDate || todayStr, p.scheduledTime || '18:00', p.validDays || 7); else await db.collection('gifts').doc(g.id).update({ status: 'rejected' }); res.push("✅ الهدية"); }
-} else if (t === 'ADD_EXPENSE' && p.title) { const id = "exp-" + Date.now(); await db.collection('expenses').doc(id).set({ id, title: p.title, amount: Number(p.amount || 0), shiftId: adminShift, date: todayStr, createdAt: new Date().toISOString() }); res.push("✅ مصروف"); }
-else if (t === 'DELETE_EXPENSE' && p.id) { await db.collection('expenses').doc(p.id).delete(); res.push("✅ حذف مصروف"); }
-else if (t === 'ADD_DEBT' && p.customerName) { const id = "dbt-" + Date.now(); await db.collection('debts').doc(id).set({ id, customerName: p.customerName, amount: Number(p.amount || 0), note: p.note || '', paid: false, shiftId: adminShift, date: todayStr, createdAt: new Date().toISOString() }); res.push("✅ شكك"); }
-else if (t === 'SETTLE_DEBT') { const d = debts.find(x => x.id === p.debtId || (!x.paid && x.customerName.includes(p.customerName || '---'))); if (d) { await db.collection('debts').doc(d.id).update({ paid: true, paidDate: todayStr }); await db.collection('sales').doc("dp-" + Date.now()).set({ id: "dp-" + Date.now(), devName: 'سداد شكك', customerName: d.customerName, totalCost: Number(d.amount), source: 'in_store', shiftId: adminShift, date: todayStr, createdAt: new Date().toISOString() }); res.push("✅ سداد شكك"); } }
-else if (t === 'ADD_MATCH' && p.teamA) { const id = "m-" + Date.now(); await db.collection('matches').doc(id).set({ id, teamA: p.teamA, teamB: p.teamB || 'الخصم', time: p.time || '9:00 م', status: 'open', scoreA: 0, scoreB: 0, predictions: {}, createdAt: new Date().toISOString() }); res.push("✅ ماتش"); }
-else if (t === 'SETTLE_MATCH') { const tm = matches.find(x => x.id === p.matchId || x.status === 'open'); if (tm) { await settleMatchAndReward(tm, Number(p.scoreA || 0), Number(p.scoreB || 0)); res.push("✅ اعتماد ماتش"); } }
-else if (t === 'DELETE_MATCH' && p.id) { await db.collection('matches').doc(p.id).delete(); res.push("✅ حذف ماتش"); }
-else if (t === 'CREATE_TOURNAMENT' && p.title) { const id = "tr-" + Date.now(); await db.collection('tournaments').doc(id).set({ id, title: p.title, game: p.game || 'EA FC 25', entryFee: Number(p.entryFee || 50), prizeText: p.prizeText || '500ج', maxPlayers: Number(p.maxPlayers || 16), players: [], status: 'open', bracketNote: '', createdAt: new Date().toISOString() }); res.push("✅ بطولة"); }
-else if (t === 'UPDATE_TOURNAMENT' || t === 'DELETE_TOURNAMENT') { const trn = tournaments.find(x => x.id === p.id || (p.title && x.title.includes(p.title))); if (trn) { if (t === 'DELETE_TOURNAMENT') await db.collection('tournaments').doc(trn.id).delete(); else await db.collection('tournaments').doc(trn.id).update(Object.fromEntries(Object.entries(p).filter(([k]) => ['status','winner','bracketNote'].includes(k)))); res.push("✅ بطولة"); } }
-else if (t === 'UPDATE_CHALLENGE') { const ch = challenges.find(x => x.id === p.id || (p.playerName && x.playerName.includes(p.playerName))); if (ch) { await db.collection('challenges').doc(ch.id).update({ score: p.score ?? ch.score, isBoss: p.isBoss ?? ch.isBoss }); res.push("✅ تحدي"); } }
-else if (t === 'DELETE_REVIEW' && p.id) { await db.collection('reviews').doc(p.id).delete(); res.push("✅ حذف تقييم"); }
-else if (t === 'DELETE_MEMORY' && p.id) { await db.collection('memories').doc(p.id).delete(); res.push("✅ حذف صورة"); }
-else if (t === 'DELETE_CHALLENGE' && p.id) { await db.collection('challenges').doc(p.id).delete(); res.push("✅ حذف تحدي"); }
-else if (t === 'DELETE_SUGGESTION' && p.id) { await db.collection('suggestions').doc(p.id).delete(); res.push("✅ حذف مقترح"); }
-else if (t === 'ADD_HALL_RECORD' && p.title) { const id = "hof-" + Date.now(); await db.collection('hall_of_fame').doc(id).set({ id, title: p.title, holder: p.holder || 'بطل', score: p.score || '10', game: p.game || 'PS5' }); res.push("✅ رقم قياسي"); }
-else if (t === 'DELETE_HALL_RECORD' && p.id) { await db.collection('hall_of_fame').doc(p.id).delete(); res.push("✅ حذف رقم"); }
-else if (t === 'TOGGLE_FREEZE') { await db.collection('site_settings').doc('runtime').set({ globalFrozen: !!p.active }, { merge: true }); res.push("✅ تجميد: " + (p.active ? 'شغال' : 'متوقف')); }
-else if (t === 'SEND_NOTIFICATION' && adminSecret) { await fetch(AI_WORKER_URL + "/send-notification", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, title: p.title || config.loungeName, message: p.message || '' }) }); res.push("✅ إرسال إشعار"); }
-else if (t === 'CREATE_HANDOVER') { const id = "ho-" + Date.now(); await db.collection('shift_handovers').doc(id).set({ id, fromShift: adminShift, drawerCash: Number(p.drawerCash ?? netCash), controllersOk: p.controllersOk || 'سليمة', notes: p.notes || '', acceptedBy: '', date: todayStr, createdAt: new Date().toISOString() }); res.push("✅ تسليم شفت"); }
-else if (t === 'UPDATE_CONFIG') { await db.collection('site_settings').doc('config').set({ ...config, ...Object.fromEntries(Object.entries(p).filter(([k]) => ['loungeName','phone','whatsappNumber','openingHours','partyTax','cityLocation','mapsUrl','closingSlogan','termsText'].includes(k))) }); res.push("✅ الإعدادات"); }
-else if (t === 'LEARN_MEMORY' && p.lesson) { const id = "mem-" + Date.now(); await db.collection('ai_memory').doc(id).set({ id, lesson: p.lesson, createdAt: new Date().toISOString() }); res.push("✅ حفظ قاعدة"); }
 logSystemEvent('AI المدير', t, JSON.stringify(p).slice(0, 100));
 } catch (err) { res.push("❌ " + t + ": " + (err?.message || 'خطأ')); }
 }
 return res;
-};  
- useEffect(() => {
+};
+    useEffect(() => {
 if (!adminShift || !aiPilotMode || !adminSecret) return;
 const checkMod = async (col, list, getTxt, getImg) => {
 for (const item of list.filter(x => !x.moderated).slice(0, 2)) {
@@ -1586,31 +1515,12 @@ else modRef.current[item.id] = false;
 } catch { modRef.current[item.id] = false; }
 }
 };
-const checkAccountsAndBirthDocs = async () => {
-const targets = allCustomers.filter(x => (x.status === 'pending_approval' && !x.aiChecked) || (x.birthDocPending && x.idCardImage && !x.birthAiChecked)).slice(0, 2);
-for (const c of targets) {
-if (modRef.current["acc_" + c.phone]) continue; modRef.current["acc_" + c.phone] = true;
-try {
-const r = await fetch(AI_WORKER_URL + "/moderate", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, itemType: 'account_check', text: c.name, birthDate: c.birthDate || '', imageBase64: c.idCardImage || null }) });
-const d = await r.json();
-const hasDoc = !!(c.birthDate && c.idCardImage);
-const docValid = hasDoc && !!d?.isRealDoc && !!d?.idClear && !!d?.birthMatches;
-const upd = { aiChecked: true, birthAiChecked: !!c.idCardImage, aiAccountNote: (d?.extractedBirthDate ? ("تاريخ الوثيقة: " + d.extractedBirthDate + " — ") : "") + (d?.reason || '') };
-if (c.status === 'pending_approval') {
-if (d?.safe && (!hasDoc || docValid)) { await approveCustomerAccount(c); }
-else { upd.status = 'pending_approval'; }
-}
-if (hasDoc) { upd.birthVerified = docValid; upd.birthDocPending = !docValid; }
-await db.collection('customers').doc(c.phone).set(upd, { merge: true });
-} catch { modRef.current["acc_" + c.phone] = false; }
-}
-};
 checkMod('memories', memories, m => m.caption, m => m.image);
 checkMod('reviews', reviews, r => r.author + ": " + r.comment);
 checkMod('challenges', challenges, c => c.playerName + " - " + c.stake);
-checkAccountsAndBirthDocs();
-},[adminShift, aiPilotMode, adminSecret, memories, reviews, challenges, allCustomers]);
-    const runTrustScoreAI = async (c) => {
+},[adminShift, aiPilotMode, adminSecret, memories, reviews, challenges]);
+
+const runTrustScoreAI = async (c) => {
 if (!adminSecret) return alert('أدخل ADMIN_AI_SECRET أولاً!');
 const bks = allBookings.filter(b => b.phone === c.phone);
 const stats = { confirmed: bks.filter(b => b.status === 'confirmed').length, rejected: bks.filter(b => b.status === 'rejected').length, emergencyCancels: bks.filter(b => b.status === 'cancelled_emergency').length, onTheWayCount: bks.filter(b => !!b.onTheWayEta).length, incidents: (c.incidents || []).length };
@@ -1618,6 +1528,7 @@ const res = await fetch(AI_WORKER_URL + "/trust-score", { method: 'POST', header
 const d = await res.json();
 if (res.ok && d.score !== undefined) { await db.collection('customers').doc(c.phone).set({ trustScore: Number(d.score), trustLabel: d.label || 'جيد', trustNote: d.note || '' }, { merge: true }); playNotificationSound('cash'); alert("✓ تقييم الالتزام: " + d.score + "/100 (" + d.label + ")\n" + (d.note || '')); }
 };
+
 const runWinBackAI = async () => {
 if (!adminSecret) return alert('أدخل ADMIN_AI_SECRET أولاً!');
 const cutoff = Date.now() - 14 * 86400000;
@@ -1627,20 +1538,7 @@ const res = await fetch(AI_WORKER_URL + "/win-back", { method: 'POST', headers: 
 const d = await res.json();
 if (Array.isArray(d?.messages)) setWinBackMsgs(d.messages);
 };
-const analyzeManagerStyle = async (force = false) => {
-if (!adminSecret || learningBusy) return;
-const logs = adminLogs.filter(l => l.actor === 'shift_1' || l.actor === 'shift_2').slice(0, 20);
-if (logs.length < 3) { if (force) alert('اعمل كام حركة الأول عشان الـ AI يدرس أسلوبك!'); return; }
-setLearningBusy(true);
-try {
-const res = await fetch(AI_WORKER_URL + "/learn-style", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, recentActions: logs.map(l => l.actionType + ": " + l.detail), existingLessons: aiMemory.map(m => m.lesson) }) });
-const d = await res.json();
-if (Array.isArray(d?.lessons) && d.lessons.length) {
-for (const ls of d.lessons.slice(0, 3)) { const id = "mem-" + Date.now() + "-" + Math.random().toString(36).slice(2, 4); await db.collection('ai_memory').doc(id).set({ id, lesson: ls, autoLearned: true, createdAt: new Date().toISOString() }); }
-if (force) { playNotificationSound('cash'); alert("✓ استنتج " + d.lessons.length + " قواعد جديدة!"); }
-} else if (force) alert('أسلوبك متسجل بالفعل.');
-} finally { setLearningBusy(false); }
-};
+
 const handleAdminAuth = async (e) => {
 e.preventDefault();
 const isS1 = await verifyStoredHash(inputPin, shiftHashes.shift_1), isS2 = await verifyStoredHash(inputPin, shiftHashes.shift_2), isM = await verifyStoredHash(inputPin, shiftHashes.master);
@@ -1649,6 +1547,7 @@ if (!String(shiftHashes.shift_1).startsWith('sha256:') && isS1) db.collection('s
 setAdminShift(isS2 ? 'shift_2' : 'shift_1'); setPinError(false); setInputPin(''); playNotificationSound('cash');
 } else { setPinError(true); setInputPin(''); playNotificationSound('alert'); }
 };
+
 const curSales = completedSales.filter(s => (s.shiftId || 'shift_1') === adminShift && s.date === todayStr), curExp = expenses.filter(e => (e.shiftId || 'shift_1') === adminShift && e.date === todayStr), curDebts = debts.filter(d => (d.shiftId || 'shift_1') === adminShift);
 const inStoreRev = curSales.reduce((a, s) => a + Number(s.totalCost || 0), 0);
 const onlineRev = allBookings.filter(b => (b.status === 'confirmed' || b.status === 'cancelled_emergency') && b.date === todayStr).reduce((a, b) => a + Number(b.status === 'cancelled_emergency' ? (b.emergencyUsedCost || 0) : (b.remainingCashToTransfer ?? b.totalCost ?? 0)), 0);
@@ -1658,8 +1557,7 @@ const hrCounts = {}, drinkCounts = {}; let snackRev = 0, snackCostTot = 0;
 allBookings.filter(b => b.status === 'confirmed').forEach(b => { const h = (b.time || '').split(':')[0]; if (h) hrCounts[h] = (hrCounts[h] || 0) + 1; });
 completedSales.forEach(s => (s.snackItems || []).forEach(it => { drinkCounts[it.name] = (drinkCounts[it.name] || 0) + 1; snackRev += Number(it.price || 0); const m = snacksMenu.find(x => x.id === it.id); snackCostTot += Number(m?.costPrice || Math.round((it.price || 0) * 0.5)); }));
 const peakHr = Object.entries(hrCounts).sort((a, b) => b[1] - a[1])[0]?.[0], topDrink = Object.entries(drinkCounts).sort((a, b) => b[1] - a[1])[0]?.[0], lowStock = snacksMenu.filter(s => (s.stock ?? 20) <= 3);
-const pendingBirthdays = allCustomers.filter(c => c.birthDate && c.idCardImage && !c.birthVerified), pendingGifts = allGifts.filter(g => g.status === 'pending_admin');
-if (!adminShift) return (
+    if (!adminShift) return (
 <div className="max-w-sm mx-auto py-16 px-4 space-y-4 text-xs text-center">
 <div className="w-16 h-16 bg-amber-500/10 border-2 border-amber-500/40 rounded-3xl flex items-center justify-center mx-auto text-3xl">🔒</div>
 <h1 className="text-xl font-black text-white">لوحة تحكم إدارة {config.loungeName}</h1>
@@ -1668,6 +1566,100 @@ if (!adminShift) return (
 </div>
 );
 
+const addSnackToSes = (ses, snackId) => {
+const sn = snacksMenu.find(x => x.id === snackId); if (!sn || (sn.stock ?? 0) <= 0) return alert('نفذت الكمية!');
+db.collection('sessions').doc(ses.id).update({ snacksCost: (ses.snacksCost || 0) + sn.price, snackItems: [...(ses.snackItems || []), { id: sn.id, name: sn.name, price: sn.price }] });
+db.collection('inventory').doc('snacks').set({ menu: snacksMenu.map(x => x.id === snackId ? { ...x, stock: Math.max(0, (x.stock || 20) - 1) } : x) }); playNotificationSound('click');
+};
+
+const finishSes = async (ses, total, mins, check, dmg = 0, payWallet = false) => {
+const finalTot = total + Number(dmg || 0);
+if (payWallet && ses.customerPhone) {
+await db.runTransaction(async tx => { const ref = db.collection('customers').doc(ses.customerPhone), cs = await tx.get(ref); if (!cs.exists || Number(cs.data().walletBalance || 0) < finalTot) throw new Error('رصيد محفظة العميل غير كافٍ!'); tx.update(ref, { walletBalance: Number(cs.data().walletBalance) - finalTot }); });
+}
+if (ses.customerPhone) {
+const xpAdd = Math.round(mins * 1.5), hrsAdd = Number((mins / 60).toFixed(2)), mKey = getCairoMonthKey();
+await db.runTransaction(async tx => { const ref = db.collection('customers').doc(ses.customerPhone), cs = await tx.get(ref); if (!cs.exists) return; const d = cs.data(), nx = (d.monthKey === mKey ? Number(d.monthlyXP || 0) : 0) + xpAdd; tx.update(ref, { hoursPlayed: Number(d.hoursPlayed || 0) + hrsAdd, xp: Number(d.xp || 0) + xpAdd, monthlyXP: nx, monthKey: mKey }); });
+}
+const sale = { id: "sale-" + Date.now(), ref: "REC-" + Math.floor(1000 + Math.random() * 9000), devName: ses.devName, customerName: ses.customerName, durationMins: mins, snackItems: ses.snackItems || [], snacksCost: ses.snacksCost || 0, totalCost: finalTot, source: payWallet ? 'wallet' : 'in_store', shiftId: adminShift, date: todayStr, time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }), createdAt: new Date().toISOString(), controllersCheck: check, damageFee: dmg };
+await db.collection('sales').doc(sale.id).set(sale); await db.collection('sessions').doc(ses.id).delete(); await db.collection('devices').doc(ses.deviceId).update({ status: 'available' });
+logSystemEvent(adminShift, 'FINISH_SESSION', ses.devName + ": " + finalTot + "ج"); setReceipt(sale); playNotificationSound('cash');
+};
+    return (
+<div className="max-w-7xl mx-auto py-6 space-y-5 text-xs">
+{!adminSecret && <div className="p-3.5 bg-amber-500/15 border border-amber-500/50 rounded-2xl flex flex-wrap justify-between items-center gap-2"><span className="text-amber-200 font-bold">🔑 أدخل ADMIN_AI_SECRET لتفعيل AI المدير والرقابة:</span><form onSubmit={e => { e.preventDefault(); const v = e.target.sec.value.trim(); if (v) { sessionStorage.setItem('twix_admin_ai_secret', v); setAdminSecret(v); playNotificationSound('cash'); } }} className="flex gap-2"><input name="sec" type="password" placeholder="ADMIN_AI_SECRET" className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-1.5 text-white font-mono" /><button className="px-3 py-1.5 bg-amber-500 text-black font-black rounded-xl">حفظ</button></form></div>}
+<div className="flex flex-wrap justify-between items-center bg-neutral-900 p-4 rounded-3xl border border-neutral-800 gap-3">
+<div><div className="flex items-center gap-2"><h2 className="font-black text-white text-base">لوحة تحكم {config.loungeName}</h2><span className="px-2.5 py-0.5 rounded-full font-black text-[10px] bg-amber-500 text-black font-mono">{adminShift === 'shift_1' ? 'شِفت 1' : 'شِفت 2'}</span></div><span className="text-[10px] text-emerald-400 font-bold block">🟢 كل الفلوس والحجوزات بموافقتك فقط</span></div>
+<div className="flex flex-wrap items-center gap-1.5">
+<button onClick={() => { const nxt = !aiPilotMode; setAiPilotMode(nxt); db.collection('site_settings').doc('ai_pilot').set({ active: nxt }); }} className={"px-3 py-2 rounded-xl font-black border " + (aiPilotMode ? 'bg-emerald-600 text-white border-emerald-400 animate-pulse' : 'bg-neutral-800 text-neutral-400 border-neutral-700')}>{aiPilotMode ? '🟢 فحص الحسابات AI مفعّل' : '⚪ تفعيل فحص الحسابات AI'}</button>
+<button onClick={() => setShowAIChat(true)} className="bg-amber-500 text-black font-black px-3 py-2 rounded-xl">🤖 شات AI المدير</button>
+<button onClick={() => setShowWalkIn(true)} className="bg-amber-500/20 text-amber-300 border border-amber-500/40 font-black px-3 py-2 rounded-xl">+ زبون صالة</button>
+<button onClick={() => setShowCashTopup(true)} className="bg-emerald-600 text-white font-black px-3 py-2 rounded-xl">💰 شحن كاش</button>
+<button onClick={() => setShowCreateCust(true)} className="bg-blue-600 text-white font-black px-3 py-2 rounded-xl">👤 تفعيل زائر</button>
+<button onClick={() => setShowNewOffer(true)} className="bg-purple-600 text-white font-black px-3 py-2 rounded-xl">📢 عرض</button>
+<button onClick={() => setShowDevicesModal(true)} className="bg-neutral-800 text-cyan-300 px-3 py-2 rounded-xl border border-cyan-500/30 font-bold">🎮 الأجهزة والألعاب</button>
+<button onClick={() => setShowTournModal(true)} className="bg-neutral-800 text-purple-300 px-3 py-2 rounded-xl border border-purple-500/30 font-bold">🏆 البطولات</button>
+<button onClick={() => setShowPricing(true)} className="bg-neutral-800 text-amber-300 px-3 py-2 rounded-xl border border-amber-500/30 font-bold">🏷️ الأسعار والتكلفة</button>
+<button onClick={() => setShowConfig(true)} className="bg-neutral-800 text-neutral-200 px-3 py-2 rounded-xl border border-neutral-700 font-bold">⚙️ الإعدادات</button>
+<button onClick={() => setShowPin(true)} className="bg-neutral-800 text-purple-300 px-3 py-2 rounded-xl font-bold">🔑 الشفت</button>
+<button onClick={() => setShowHandoverModal(true)} className="bg-neutral-800 text-cyan-300 px-3 py-2 rounded-xl font-bold">🔄 تسليم شِفت</button>
+<button onClick={() => db.collection('site_settings').doc('runtime').set({ globalFrozen: !globalFrozen }, { merge: true })} className={"px-3 py-2 rounded-xl font-black " + (globalFrozen ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white')}>{globalFrozen ? '▶️ استئناف' : '⏸️ تجميد'}</button>
+<button onClick={() => setShowExpense(true)} className="bg-neutral-800 text-rose-300 px-3 py-2 rounded-xl font-bold">📉 مصروف</button>
+<button onClick={() => setShowDebt(true)} className="bg-neutral-800 text-amber-300 px-3 py-2 rounded-xl font-bold">📝 الشكك ({totUnpaidDebts}ج)</button>
+<button onClick={() => setShowReport(true)} className="bg-neutral-800 text-emerald-300 px-3 py-2 rounded-xl font-bold">📊 الوردية</button>
+<button onClick={() => { setAdminShift(null); sessionStorage.removeItem('twix_admin_ai_secret'); setAdminSecret(''); }} className="p-2 bg-neutral-950 text-neutral-400 rounded-xl border border-neutral-800">🚪</button>
+</div>
+</div>
+<div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+<div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl"><span className="text-[10px] text-neutral-400 block">🌐 كاش الأونلاين (اليوم)</span><strong className="text-lg font-black text-blue-400 font-mono">{onlineRev} ج</strong><span className="text-[9px] text-neutral-500 block">محافظ: {walletSpentToday} ج</span></div>
+<div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl"><span className="text-[10px] text-neutral-400 block">🏪 كاش الصالة (الشفت)</span><strong className="text-lg font-black text-emerald-400 font-mono">{inStoreRev} ج</strong></div>
+<div className="bg-neutral-900 border border-neutral-800 p-4 rounded-2xl"><span className="text-[10px] text-rose-300 block">📉 المصاريف</span><strong className="text-lg font-black text-rose-400 font-mono">{totExp} ج</strong></div>
+<div className="bg-gradient-to-br from-amber-500/25 to-neutral-900 border-2 border-amber-500/50 p-4 rounded-2xl"><span className="text-[10px] text-amber-300 block font-black">💵 صافي كاش الدرج</span><strong className="text-xl font-black text-amber-400 font-mono">{netCash} ج</strong></div>
+</div>
+<div className="bg-neutral-900 border border-neutral-800 p-4 rounded-3xl flex flex-wrap justify-between items-center gap-3">
+<div className="flex flex-wrap gap-3 text-[11px]"><span>⏰ وقت الذروة: <strong className="text-amber-400">{peakHr ? (peakHr + ":00") : '—'}</strong></span><span>🥤 الأكثر مبيعاً: <strong className="text-cyan-300">{topDrink || '—'}</strong></span><span>💰 صافي ربح الكافتيريا: <strong className="text-emerald-400 font-mono">{snackRev - snackCostTot} ج</strong></span>{lowStock.length > 0 && <span className="text-rose-400 font-bold">⚠️ نواقص: {lowStock.map(s => s.name + "(" + s.stock + ")").join('، ')}</span>}</div>
+<button onClick={runWinBackAI} className="px-3 py-1.5 bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 rounded-xl font-bold">🎯 رادار العملاء الغائبين AI</button>
+</div>
+{winBackMsgs.length > 0 && <div className="bg-neutral-900 border border-cyan-500/40 p-4 rounded-3xl space-y-2"><div className="flex justify-between"><strong className="text-cyan-300">🎯 رسائل استعادة العملاء جاهزة:</strong><button onClick={() => setWinBackMsgs([])}>✕</button></div>{winBackMsgs.map((m, i) => <div key={i} className="p-2.5 bg-neutral-950 rounded-xl flex justify-between items-center gap-2"><div><strong className="text-white">{m.name}:</strong> <span className="text-neutral-300">{m.message}</span></div><a href={"https://wa.me/2" + m.phone + "?text=" + encodeURIComponent(m.message)} target="_blank" className="px-2.5 py-1 bg-emerald-500 text-black font-black rounded-lg">واتساب</a></div>)}</div>}
+  <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-3xl space-y-2 overflow-x-auto no-scrollbar"><strong className="text-white block">📅 تايم-لاين الشاشات اليوم ({todayStr}):</strong><div className="min-w-[650px] space-y-1.5 text-[10px]">{devices.map(d => (<div key={d.id} className="flex items-center gap-2"><span className="w-36 truncate font-bold text-amber-300">{d.name}</span><div className="flex-1 grid grid-cols-12 gap-1">{[12,13,14,15,16,17,18,19,20,21,22,23].map(h => { const slotMs = parseCairoSlotMs(todayStr, String(h).padStart(2,'0') + ":30"); const busyBk = allBookings.some(b => ['confirmed','awaiting_admin_approval'].includes(b.status) && b.date === todayStr && (b.assignedDeviceIds || []).includes(d.id) && parseCairoSlotMs(b.date, b.time) <= slotMs && (parseCairoSlotMs(b.date, b.time) + Number(b.duration || 30) * 60000) > slotMs); const busySes = d.status === 'busy' && h === getCairoHour(); return <div key={h} className={"py-1 rounded text-center font-mono " + (d.status === 'maintenance' ? 'bg-rose-900/50 text-rose-300' : ((busyBk || busySes) ? 'bg-amber-500 text-black font-black' : 'bg-neutral-950 text-neutral-500'))}>{h}</div>; })}</div></div>))}</div></div>
+{(pendingBirthdays.length > 0 || pendingGifts.length > 0) && (
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div className="bg-neutral-900 border border-pink-500/40 p-4 rounded-3xl space-y-2"><h3 className="font-bold text-pink-300">🎂 توثيق أعياد الميلاد ({pendingBirthdays.length}):</h3>{pendingBirthdays.map(c => <div key={c.phone} className="p-2.5 bg-neutral-950 rounded-xl flex justify-between items-center gap-2"><div><strong className="text-white">{c.name} ({c.phone})</strong><span className="block text-[10px] text-pink-300 font-mono">تاريخ الميلاد: {c.birthDate}</span></div><div className="flex gap-1"><button onClick={() => setViewDoc(c.idCardImage)} className="px-2 py-1 bg-neutral-800 text-cyan-300 rounded-lg text-[10px]">🪪 الصورة</button><button onClick={() => { db.collection('customers').doc(c.phone).update({ birthVerified: true, birthDocPending: false }); playNotificationSound('cash'); }} className="px-2 py-1 bg-emerald-500 text-black font-black rounded-lg text-[10px]">✓ توثيق</button><button onClick={() => db.collection('customers').doc(c.phone).update({ birthDate: '', idCardImage: null, birthDocPending: false })} className="px-2 py-1 bg-rose-600 text-white rounded-lg text-[10px]">✕ غير واضحة</button></div></div>)}</div>
+<div className="bg-neutral-900 border border-amber-500/40 p-4 rounded-3xl space-y-2"><h3 className="font-bold text-amber-300">🎁 الهدايا والمكافآت المعلقة ({pendingGifts.length}):</h3>{pendingGifts.map(g => { const sc = giftSched[g.id] || { date: todayStr, time: '18:00' }; return (<div key={g.id} className="p-2.5 bg-neutral-950 rounded-xl space-y-2"><div><strong className="text-white">{g.customerName} ({g.customerPhone})</strong><span className="block text-[10px] text-amber-300">{g.title}</span></div><div className="flex flex-wrap gap-1.5"><input type="date" value={sc.date} onChange={e => giftSched[g.id] = { ...sc, date: e.target.value }} className="bg-neutral-900 p-1 rounded text-[10px] text-white font-mono" /><input type="time" value={sc.time} onChange={e => giftSched[g.id] = { ...sc, time: e.target.value }} className="bg-neutral-900 p-1 rounded text-[10px] text-white font-mono" /><button onClick={() => approveGiftWithSchedule(g, sc.date, sc.time)} className="px-2.5 py-1 bg-emerald-500 text-black font-black rounded text-[10px]">✓ موافقة وميعاد</button><button onClick={() => db.collection('gifts').doc(g.id).update({ status: 'rejected' })} className="px-2 py-1 bg-rose-600 text-white rounded text-[10px]">✕</button></div></div>); })}</div>
+</div>
+)}
+<div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3">
+<h3 className="font-bold text-white text-sm flex justify-between"><span>🎮 الجلسات المباشرة ({sessions.length}):</span><span className="text-amber-400 font-mono">{busyCount} شغالة</span></h3>
+{sessions.length === 0 ? <p className="text-neutral-500 text-center py-3">لا توجد أجهزة شغالة.</p> : <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{sessions.map(s => { const pSec = Number(s.pausedTotalSec || 0) + (s.isPaused && s.pausedAtMs ? Math.floor((now - s.pausedAtMs) / 1000) : 0), sec = Math.max(0, Math.floor((now - new Date(s.startTime).getTime()) / 1000) - pSec), mins = Math.max(1, Math.ceil(sec / 60)), tCost = calcDevicePrice(pricing, s.devType, s.mode, mins, config.graceMinutes || 5); return (<div key={s.id} className={"p-4 bg-neutral-950 rounded-2xl space-y-2 border " + (s.targetMins && mins >= s.targetMins ? 'border-rose-500 animate-pulse' : 'border-emerald-500/40')}><div className="flex justify-between"><div><strong className="text-white block">{s.devName}</strong><span className="text-[10px] text-neutral-400">{s.customerName} {s.customerPhone ? ("(" + s.customerPhone + ")") : ''} — {s.mode === 'multi' ? 'ملتي' : 'فردي'}</span></div><span className="font-mono font-black text-emerald-400">{s.isPaused ? '⏸️ ' : ''}{Math.floor(sec/60)}:{String(sec%60).padStart(2,'0')}</span></div><div className="flex justify-between text-[11px]"><span>وقت: {mins}د ({tCost}ج)</span><span>كافتيريا: {s.snacksCost || 0}ج</span></div><div className="flex gap-1.5"><select value={sesAddSnack[s.id] || ''} onChange={e => sesAddSnack[s.id] = e.target.value} className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl p-1.5 text-white text-[11px]"><option value="">-- إضافة طلب --</option>{snacksMenu.filter(sn => sn.available !== false).map(sn => <option key={sn.id} value={sn.id}>{sn.icon} {sn.name} ({sn.price}ج)</option>)}</select><button onClick={() => { if (sesAddSnack[s.id]) addSnackToSes(s, sesAddSnack[s.id]); }} className="px-3 bg-amber-500 text-black font-black rounded-xl">+</button></div><div className="flex flex-wrap gap-1.5"><button onClick={() => s.isPaused ? db.collection('sessions').doc(s.id).update({ isPaused: false, pausedAtMs: null, pausedTotalSec: Number(s.pausedTotalSec || 0) + Math.floor((Date.now() - (s.pausedAtMs || Date.now())) / 1000) }) : db.collection('sessions').doc(s.id).update({ isPaused: true, pausedAtMs: Date.now() })} className="px-2 py-1 bg-neutral-800 text-cyan-300 rounded-lg text-[10px]">{s.isPaused ? '▶️ استئناف' : '🕌 صلاة'}</button><button onClick={() => db.collection('sessions').doc(s.id).update({ mode: s.mode === 'multi' ? 'single' : 'multi' })} className="px-2 py-1 bg-neutral-800 text-amber-300 rounded-lg text-[10px]">🔄 {s.mode === 'multi' ? 'فردي' : 'ملتي'}</button>{s.customerPhone && <button onClick={() => finishSes(s, tCost + (s.snacksCost || 0), mins, 'سليمة', 0, true).catch(er => alert(er.message))} className="px-2 py-1 bg-purple-600 text-white rounded-lg text-[10px] font-bold">💳 محفظة</button>}<button onClick={() => { const hr = (pricing[s.devType] || DEFAULT_PRICING.PS4)[s.mode === 'multi' ? 'multi' : 'single'].perHour; finishSes(s, Math.ceil(mins * (hr / 60)) + (s.snacksCost || 0), mins, 'بالدقيقة', 0); }} className="px-2 py-1 bg-amber-500 text-black font-black rounded-lg text-[10px]">⚡ بالدقيقة</button><button onClick={() => { const ok = confirm('الدراعات سليمة؟'); const fee = ok ? 0 : Number(prompt('غرامة التلف:', '50') || 0); finishSes(s, tCost + (s.snacksCost || 0), mins, ok ? 'سليمة' : ("تلف +" + fee + "ج"), fee); }} className="flex-1 py-1 bg-rose-600 text-white font-black rounded-lg">إنهاء 🖨️</button></div></div>); })}</div>}
+</div>
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div className="bg-neutral-900 border border-neutral-800 p-4 rounded-3xl space-y-2"><h3 className="font-bold text-white">🛎️ الطلبات وإشعارات "أنا في الطريق" والطوارئ ({inLoungeRequests.filter(r => r.status !== 'done').length}):</h3>{inLoungeRequests.filter(r => r.status !== 'done').map(r => <div key={r.id} className="p-2.5 bg-neutral-950 rounded-xl border border-amber-500/30 flex justify-between items-center gap-2"><div><strong className="text-amber-400">{r.screenName}</strong> — <span className="text-white">{r.customerName}</span><p className="text-[11px] text-neutral-300">{r.detail} ({r.time})</p></div><button onClick={() => resolveTableReq(r, r.type === 'emergency_cancel' ? confirm("إرجاع المتبقي (" + (r.refundDue || 0) + "ج) لمحفظة العميل؟") : false).catch(er => alert(er.message))} className="px-2.5 py-1 bg-emerald-500 text-black font-black rounded-xl text-[10px]">✓ موافقة</button></div>)}</div>
+<div className="bg-neutral-900 border border-neutral-800 p-4 rounded-3xl space-y-2"><h3 className="font-bold text-white">💳 طلبات شحن المحافظ ({walletRequests.filter(w => w.status === 'pending').length}):</h3>{walletRequests.filter(w => w.status === 'pending').map(w => <div key={w.id} className="p-2.5 bg-neutral-950 rounded-xl border border-emerald-500/30 flex justify-between items-center gap-2"><div><strong className="text-white">{w.customerName} ({w.customerPhone})</strong><span className="block text-[10px] text-emerald-400 font-mono">{w.amount} ج | {w.senderPhone}</span></div><div className="flex gap-1">{w.receiptImage && <button onClick={() => setViewDoc(w.receiptImage)} className="px-2 py-1 bg-neutral-800 text-amber-300 rounded text-[10px]">📸</button>}<button onClick={() => approveWalletReq(w).catch(er => alert(er.message))} className="px-2 py-1 bg-emerald-500 text-black font-black rounded text-[10px]">✓</button><button onClick={() => db.collection('wallet_requests').doc(w.id).update({ status: 'rejected' })} className="px-2 py-1 bg-rose-600 text-white rounded text-[10px]">✕</button></div></div>)}</div>
+</div>
+{showAIChat && (() => {
+const curT = aiThreads.find(t => t.id === activeAiTid) || aiThreads[0];
+const pushAi = (m) => setAiThreads(p => p.map(t => t.id === curT.id ? { ...t, title: t.msgs.length <= 1 && m.sender === 'user' ? (m.text || 'أمر').slice(0, 26) : t.title, msgs: [...t.msgs, m] } : t));
+const sendAdminAI = async ({ text = '', audioBase64 = null } = {}) => {
+const q = (text || aiQuery).trim(); if ((!q && !aiImg && !audioBase64) || aiLoading) return;
+if (!adminSecret) return alert('أدخل ADMIN_AI_SECRET أولاً!');
+const imgSend = aiImg, hist = curT.msgs.slice(-6).map(m => ({ sender: m.sender, text: m.text }));
+pushAi({ sender: 'user', text: q || (audioBase64 ? '🎤 أمر صوتي' : '📸 صورة'), image: imgSend });
+setAiQuery(''); setAiImg(null); setAiLoading(true);
+try {
+const res = await fetch(AI_WORKER_URL + "/admin-chat", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, message: q, history: hist, imageBase64: imgSend, audioBase64, loungeContext: buildSmartAdminContext() }) });
+const d = await res.json().catch(() => ({}));
+if (!res.ok) pushAi({ sender: 'ai', text: d?.reply || ("⚠️ خطأ (" + res.status + "): " + (d?.error || '')) });
+else { let exec = ''; if (Array.isArray(d?.actions) && d.actions.length) { const rl = await executeAIActions(d.actions); if (rl.length) exec = '\n\n📌 التنفيذ الفعلي:\n' + rl.join('\n'); } pushAi({ sender: 'ai', text: (d?.reply || 'تم.') + exec }); }
+} catch { pushAi({ sender: 'ai', text: '⚠️ تعذر الاتصال بالسحابة.' }); } finally { setAiLoading(false); }
+};
+return (
+<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"><div className="bg-neutral-900 border border-amber-500/50 rounded-3xl p-5 max-w-md w-full space-y-3 shadow-2xl"><div className="flex justify-between items-center border-b border-neutral-800 pb-2"><span className="text-amber-400 font-black">🤖 AI المدير التنفيذي</span><div className="flex gap-1.5"><button onClick={() => setShowAiHist(!showAiHist)} className="text-[10px] bg-neutral-800 text-cyan-300 px-2 py-0.5 rounded-lg">📜 ({aiThreads.length})</button><button onClick={() => { const id = "a-" + Date.now(); setAiThreads(p => [{ id, title: 'جلسة جديدة', msgs: [{ sender: 'ai', text: 'تحت أمرك يا مدير!' }] }, ...p]); setActiveAiTid(id); setShowAiHist(false); }} className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-lg">+ جديد</button><button onClick={() => setShowAIChat(false)} className="text-neutral-400 font-bold px-1">✕</button></div></div>{showAiHist && <div className="max-h-24 overflow-y-auto space-y-1 bg-neutral-950 p-2 rounded-xl">{aiThreads.map(t => <button key={t.id} onClick={() => { setActiveAiTid(t.id); setShowAiHist(false); }} className={"w-full text-right p-1.5 rounded text-[10px] truncate " + (t.id === activeAiTid ? 'bg-amber-500 text-black font-black' : 'text-neutral-300')}>{t.title}</button>)}</div>}<div className="h-60 overflow-y-auto space-y-2 p-2 bg-neutral-950 rounded-2xl border border-neutral-800 no-scrollbar">{curT.msgs.map((c, i) => <div key={i} className={"p-2.5 rounded-xl text-[11px] whitespace-pre-line " + (c.sender === 'ai' ? 'bg-neutral-900 text-neutral-200 border border-neutral-800' : 'bg-amber-500 text-black font-bold mr-auto')}>{c.image && <img src={c.image} className="max-h-24 rounded-lg mb-1" />}{c.text}</div>)}{aiLoading && <div className="p-2 rounded-xl text-[11px] bg-neutral-900 text-amber-400 animate-pulse">⏳ جاري التنفيذ...</div>}</div>{aiImg && <div className="relative w-fit"><img src={aiImg} className="max-h-14 rounded-lg" /><button onClick={() => setAiImg(null)} className="absolute -top-1 -right-1 bg-rose-600 text-white rounded-full w-4 h-4 text-[9px]">✕</button></div>}<form onSubmit={e => { e.preventDefault(); sendAdminAI(); }} className="flex gap-1.5 items-center"><input disabled={aiLoading} value={aiQuery} onChange={e => setAiQuery(e.target.value)} placeholder="اسأل أو أمرني بصوتك..." className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-2.5 py-2 text-white text-[11px]" /><FilePickerButton onPick={setAiImg} label="📷" className="px-2 py-2 bg-neutral-800 text-cyan-300 rounded-xl font-bold" /><VoiceMicButton disabled={aiLoading} onTranscript={t => sendAdminAI({ text: t })} onAudioData={a => sendAdminAI({ audioBase64: a })} /><button disabled={aiLoading} className="px-3 py-2 bg-amber-500 text-black font-black rounded-xl">إرسال</button></form></div></div>
+);
+})()}
+{viewDoc && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"><div className="bg-neutral-900 border border-neutral-700 rounded-3xl p-5 max-w-md w-full space-y-3 text-center"><div className="flex justify-between"><h3 className="font-bold text-white">معاينة الوثيقة</h3><button onClick={() => setViewDoc(null)}>✕</button></div><img src={viewDoc} className="max-h-[65vh] mx-auto rounded-xl object-contain" /><button onClick={() => setViewDoc(null)} className="w-full py-2 bg-neutral-800 text-white rounded-xl font-bold">إغلاق</button></div></div>}
+</div>
+);
+}
 ReactDOM.createRoot(document.getElementById('root')).render(<AppErrorBoundary><App /></AppErrorBoundary>);
 </script>
 </body>
