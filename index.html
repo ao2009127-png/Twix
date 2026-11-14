@@ -1516,7 +1516,7 @@
               const hrs = p.durationHours ? Number(p.durationHours) : (p.durationDays ? Number(p.durationDays) * 24 : 0);
               const exp = hrs > 0 ? Date.now() + hrs * 3600000 : null;
               await db.collection('offers').doc(id).set({ id, title: p.title, detail: p.detail || '', price: Number(p.price || 100), oldPrice: Number(p.oldPrice || 0), deviceType: p.deviceType || 'PS5', mode: p.mode || 'single', duration: Number(p.duration || 60), expiresAt: exp, date: todayStr, createdAt: new Date().toISOString() });
-              if (p.sendPush && adminSecret) fetch(`${AI_WORKER_URL}/send-notification`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, title: p.title, message: p.detail || p.title }) }).catch(() => {});
+              if (p.sendPush && adminSecret) fetch(`${AI_WORKER_URL}/send-notification`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, title: p.title, message: p.detail || p.title, url: `${window.location.origin}${window.location.pathname}?offer=${id}#booking` }) }).catch(() => {});
               results.push(`✅ تم نشر العرض "${p.title}"`);
             } else if (t === 'DELETE_OFFER') {
               const oid = p.offerId || p.id;
