@@ -291,7 +291,8 @@
       return { ok: true, assignedIds };
       }
     function App() {
-      const [page, setPage] = useState('home');
+      const VALID_PAGES = ['home','booking','payment','bundles','parties','challenges','predictions','wheel','squad_hub','memories','in_lounge','hall_of_fame','guide','reviews','account','settings','admin'];
+   const [page, setPage] = useState(() => { const h = (window.location.hash || '').replace('#', ''); return (VALID_PAGES.includes(h) && h !== 'admin') ? h : 'home'; });
       const [mobileMenu, setMobileMenu] = useState(false);
       const [now, setNow] = useState(Date.now());
       const [globalFrozen, setGlobalFrozen] = useState(false);
