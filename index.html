@@ -482,6 +482,7 @@
               <div className="flex items-center gap-2">
                 <button onClick={() => navigate('account')} className="px-3 py-1.5 rounded-xl text-xs font-bold bg-neutral-900 border border-neutral-800 text-amber-400 flex items-center gap-1.5"><span>👤</span><span className="hidden sm:inline">{currentCustomer ? `${currentCustomer.name.split(' ')[0]} (${currentCustomer.walletBalance || 0}ج)` : 'حسابي ومحفظتي'}</span><span className="sm:hidden font-mono">{currentCustomer ? `${currentCustomer.walletBalance || 0}ج` : 'حسابي'}</span></button>
                 <button onClick={() => { setSelectedOffer(null); navigate('booking'); }} className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3 py-1.5 rounded-xl text-xs">احجز الآن</button>
+                <button onClick={() => navigate('settings')} className="p-2 rounded-xl border border-neutral-800 text-neutral-300 text-xs" title="إعدادات التطبيق">⚙️</button>
                 <button onClick={() => navigate('admin')} className="p-2 rounded-xl border border-neutral-800 text-neutral-400 text-xs relative" title="لوحة الإدارة">🔒{aiPilotMode && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping"></span>}</button>
                 <button onClick={() => setMobileMenu(!mobileMenu)} className="xl:hidden p-2 text-neutral-300 text-lg">☰</button>
               </div>
