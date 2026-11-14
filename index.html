@@ -1338,19 +1338,7 @@ customersDirectory: allCustomers.map(c => ({ name: c.name, phone: c.phone, statu
 aiMemoryLessons: aiMemory.slice(0, 15).map(m => m.lesson)
 };
 };
-const confirmBookingByAdmin = async (b) => {
-const mins = Number(b.duration || 30), xpAdd = Math.round(mins * 1.5), hrsAdd = Number((mins / 60).toFixed(2)), mKey = getCairoMonthKey();
-if (!b.rewardedStats && b.phone) {
-const cRef = db.collection('customers').doc(b.phone);
-await db.runTransaction(async tx => {
-const s = await tx.get(cRef); if (!s.exists) return; const d = s.data(), nxtMXP = (d.monthKey === mKey ? Number(d.monthlyXP || 0) : 0) + xpAdd;
-tx.set(cRef, { hoursPlayed: Number(d.hoursPlayed || 0) + hrsAdd, xp: Number(d.xp || 0) + xpAdd, monthlyXP: nxtMXP, monthKey: mKey }, { merge: true });
-db.collection('public_ranks').doc(b.phone).set({ id: b.phone, name: d.name || b.customerName, monthlyXP: nxtMXP, monthKey: mKey, level: calculateInfiniteLevel((d.xp || 0) + xpAdd).level }, { merge: true });
-});
-}
-await db.collection('bookings').doc(b.id).update({ status: 'confirmed', timerStatus: 'scheduled', rewardedStats: true, confirmedByShift: adminShift });
-logSystemEvent(adminShift, 'CONFIRM_BOOKING', b.ref); playNotificationSound('cash');
-};
+
     const confirmBookingByAdmin = async (b) => {
 const mins = Number(b.duration || 30), xpAdd = Math.round(mins * 1.5), hrsAdd = Number((mins / 60).toFixed(2)), mKey = getCairoMonthKey();
 if (!b.rewardedStats && b.phone) {
