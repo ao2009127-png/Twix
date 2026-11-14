@@ -1325,6 +1325,18 @@
               await db.collection('site_settings').doc('runtime').set({ globalFrozen: !!p.frozen }, { merge: true });
             } else if (t === 'ADD_MATCH' && p.teamA && p.teamB) {
               const id = `m-${Date.now()}`; await db.collection('matches').doc(id).set({ id, teamA: p.teamA, teamB: p.teamB, time: p.time || 'الليلة', status: 'open', scoreA: 0, scoreB: 0, predictions: {}, createdAt: new Date().toISOString() });
+              } else if (t === 'SETTLE_MATCH' && p.matchId) {
+              const targetM = matches.find(x => x.id === p.matchId);
+              const sA = Number(p.scoreA || 0), sB = Number(p.scoreB || 0);
+              if (targetM) {
+                const preds = targetM.predictions || {};
+                Object.keys(preds).forEach(ph => {
+                  if (Number(preds[ph].scoreA) === sA && Number(preds[ph].scoreB) === sB) {
+                    db.collection('customers').doc(ph).set({ walletBalance: firebase.firestore.FieldValue.increment(35) }, { merge: true });
+                  }
+                });
+                await db.collection('matches').doc(p.matchId).update({ scoreA: sA, scoreB: sB, status: 'closed' });
+              }
             } else if (t === 'SET_BOSS' && p.challengeId) {
               await db.collection('challenges').doc(p.challengeId).update({ isBoss: !!p.isBoss });
             } else if (t === 'ADD_HALL_RECORD' && p.title) {
@@ -1365,7 +1377,18 @@
             } else { await db.collection('reviews').doc(r.id).update({ moderated: true }); }
           } catch (e) {}
         });
-      }, [adminShift, aiPilotMode, adminSecret, memories, reviews]);
+        challenges.filter(c => !c.moderated).forEach(async (c) => {
+          if (modRef.current[c.id]) return; modRef.current[c.id] = true;
+          try {
+            const res = await fetch(`${AI_WORKER_URL}/moderate`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ adminSecret, itemType: 'challenge', text: `${c.playerName} - ${c.stake}` }) });
+            const d = await res.json();
+            if (d && d.safe === false) {
+              await db.collection('challenges').doc(c.id).delete();
+              logSystemEvent('AI الرقيب', 'AUTO_DELETE_CHALLENGE', `حذف تحدي مسيء: ${c.playerName}`);
+            } else { await db.collection('challenges').doc(c.id).update({ moderated: true }); }
+          } catch (e) {}
+        });
+      }, [adminShift, aiPilotMode, adminSecret, memories, reviews, challenges]);
 
       useEffect(() => {
         if (!adminShift || !aiPilotMode || !adminSecret) return;
