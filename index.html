@@ -1906,4 +1906,416 @@
               ))}
             </div>
           </div>
-          
+          <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3">
+            <div className="flex flex-wrap justify-between items-center gap-2">
+              <h3 className="font-bold text-white text-sm">🌐 حجوزات الأونلاين والتحكم بالوقت ({allBookings.length}):</h3>
+              <div className="flex flex-wrap gap-1.5">
+                {[['all','الكل'],['awaiting_admin_approval','معلق'],['confirmed','مؤكد']].map(([k,l]) => (
+                  <button key={k} onClick={() => setBkFilter(k)} className={`px-2.5 py-1 rounded-xl text-[10px] font-bold ${bkFilter === k ? 'bg-amber-500 text-black' : 'bg-neutral-950 text-neutral-400'}`}>{l}</button>
+                ))}
+                <input value={bkSearch} onChange={e => setBkSearch(e.target.value)} placeholder="🔍 كود أو اسم أو رقم" className="bg-neutral-950 border border-neutral-800 rounded-xl px-2.5 py-1 text-white text-[11px]" />
+              </div>
+            </div>
+            <div className="space-y-2 max-h-96 overflow-y-auto no-scrollbar">
+              {allBookings.filter(b => (bkFilter === 'all' || b.status === bkFilter) && (!bkSearch.trim() || (b.ref || '').includes(bkSearch.trim()) || (b.customerName || '').includes(bkSearch.trim()) || (b.phone || '').includes(bkSearch.trim()))).map(b => {
+                const ti = getBookingTimerInfo(b, now);
+                return (
+                  <div key={b.id} className={`p-3 bg-neutral-950 rounded-2xl flex flex-col gap-2 border ${ti.state === 'ended' ? 'border-rose-500 animate-pulse' : 'border-neutral-800'}`}>
+                    <div className="flex flex-col md:flex-row justify-between md:items-center gap-2">
+                      <div>
+                        <span className="font-mono font-bold text-amber-400">{b.ref}</span> — <strong className="text-white">{b.customerName} ({b.phone})</strong>
+                        <div className="text-[11px] text-neutral-400">{b.devicesSummary} | {b.date} ({b.time}) | <strong className="text-amber-300 font-mono">{b.totalCost} ج</strong> {b.favGame && <span className="text-cyan-300">| 🎮 {b.favGame}</span>}</div>
+                        <div className="text-[10px] text-neutral-500">{b.snacksSummary}</div>
+                        {b.incidentNote && <div className="text-[10px] text-rose-400 font-bold">⚠️ سابقة: {b.incidentNote} {b.damageFee > 0 && `(+${b.damageFee}ج)`}</div>}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {(ti.state === 'running' || ti.state === 'paused') && <span className="font-mono font-black text-xs px-2 py-1 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40">{ti.state === 'paused' ? '⏸️ ' : '⏳ '}{Math.floor(ti.remainingSec/60)}:{String(ti.remainingSec%60).padStart(2,'0')}</span>}
+                        {ti.state === 'ended' && <span className="font-black text-[10px] px-2 py-1 rounded-lg bg-rose-600 text-white">⏰ انتهى الوقت!</span>}
+                        {b.receiptScreenshot && <button onClick={() => setViewDoc(b.receiptScreenshot)} className="px-2 py-1 bg-neutral-800 text-amber-300 rounded-xl text-[10px]">📸 السكرين</button>}
+                        <button onClick={() => setReceipt({ ref: b.ref, devName: b.devicesSummary, customerName: b.customerName, durationMins: b.duration, snacksSummary: b.snacksSummary, totalCost: b.totalCost })} className="px-2 py-1 bg-neutral-800 text-white rounded-xl text-[10px]">🖨️</button>
+                        <button onClick={() => setShowEditBooking(b)} className="px-2 py-1 bg-neutral-800 text-cyan-300 rounded-xl text-[10px]">✏️ تعديل / تلف</button>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-neutral-900">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-lg font-black ${b.status === 'confirmed' ? 'bg-emerald-500/20 text-emerald-400' : (b.status === 'rejected' || b.status === 'cancelled_emergency' ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-500/20 text-amber-400')}`}>{b.status === 'confirmed' ? 'مؤكد ✅' : (b.status === 'cancelled_emergency' ? `طوارئ (${b.emergencyUsedCost||0}ج)` : (b.status === 'rejected' ? 'مرفوض' : 'معلق ⏳'))}</span>
+                      {b.status === 'awaiting_admin_approval' && <>
+                        <button disabled={busyBtn} onClick={async () => { if (busyBtn) return; setBusyBtn(true); try { const mins = Number(b.duration || 30); if (!b.rewardedStats && b.phone) await db.collection('customers').doc(b.phone).set({ hoursPlayed: firebase.firestore.FieldValue.increment(Number((mins/60).toFixed(2))), xp: firebase.firestore.FieldValue.increment(Math.round(mins*1.5)) }, { merge: true }); await db.collection('bookings').doc(b.id).update({ status: 'confirmed', timerStatus: 'scheduled', rewardedStats: true }); logSystemEvent(adminShift, 'CONFIRM_BOOKING', b.ref); playNotificationSound('cash'); } finally { setBusyBtn(false); } }} className="px-2.5 py-1 bg-emerald-500 text-black font-black rounded-xl text-[10px]">✓ تأكيد</button>
+                        <button onClick={() => { if (confirm(`رفض حجز ${b.customerName}؟`)) { db.collection('bookings').doc(b.id).update({ status: 'rejected' }); if (b.walletDeduction > 0 && b.phone) db.collection('customers').doc(b.phone).set({ walletBalance: firebase.firestore.FieldValue.increment(b.walletDeduction) }, { merge: true }); logSystemEvent(adminShift, 'REJECT_BOOKING', b.ref); } }} className="px-2 py-1 bg-rose-600 text-white rounded-xl text-[10px]">✕ رفض</button>
+                      </>}
+                      {b.status === 'confirmed' && ti.state !== 'finished' && <>
+                        {ti.state === 'scheduled' && <button onClick={() => controlBookingTimer(b, 'start')} className="px-2 py-1 bg-emerald-600 text-white rounded-lg text-[10px] font-bold">▶️ بدء العد الآن</button>}
+                        {ti.state === 'running' && <button onClick={() => controlBookingTimer(b, 'pause')} className="px-2 py-1 bg-amber-600 text-black rounded-lg text-[10px] font-black">⏸️ إيقاف مؤقت</button>}
+                        {ti.state === 'paused' && <button onClick={() => controlBookingTimer(b, 'resume')} className="px-2 py-1 bg-emerald-500 text-black rounded-lg text-[10px] font-black">▶️ استئناف</button>}
+                        <button onClick={() => controlBookingTimer(b, 'adjust', 15, confirm('إضافة سعر الـ 15 دقيقة للحساب؟ (Cancel = مجاني/تعويض)'))} className="px-2 py-1 bg-neutral-800 text-emerald-300 rounded-lg text-[10px]">+15د</button>
+                        <button onClick={() => controlBookingTimer(b, 'adjust', -15, false)} className="px-2 py-1 bg-neutral-800 text-rose-300 rounded-lg text-[10px]">-15د</button>
+                        <button onClick={() => { if (confirm(`إنهاء عداد ${b.ref} الآن؟`)) controlBookingTimer(b, 'finish'); }} className="px-2 py-1 bg-rose-600/30 text-rose-300 rounded-lg text-[10px]">⏹️ إنهاء</button>
+                      </>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3">
+            <div className="flex justify-between items-center border-b border-neutral-800 pb-2"><h3 className="font-bold text-white text-sm">⚽ توقعات الماتشات (35ج):</h3><button onClick={() => { const tA = prompt("الفريق الأول:", "الأهلي"), tB = prompt("الفريق الثاني:", "الزمالك"), tm = prompt("الموعد:", "8:00 م"); const lockH = prompt("قفل التوقع بعد كام ساعة من الآن؟ (اتركه فارغاً للقفل اليدوي):", ""); if (tA && tB) { const id = `m-${Date.now()}`; const closeAtMs = lockH ? Date.now() + Number(lockH) * 3600000 : null; db.collection('matches').doc(id).set({ id, teamA: tA, teamB: tB, time: tm || 'الليلة', closeAtMs, status: 'open', scoreA: 0, scoreB: 0, predictions: {}, createdAt: new Date().toISOString() }); } }} className="px-3 py-1 bg-emerald-500 text-black font-black rounded-xl text-xs">+ إضافة ماتش</button></div>
+            {matches.map(m => (
+              <div key={m.id} className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 flex flex-wrap justify-between items-center gap-2">
+                <div><strong className="text-white">{m.teamA} ضد {m.teamB} ({m.time})</strong><span className="block text-[10px] text-neutral-400">المتوقعون: {Object.keys(m.predictions||{}).length} | {m.status === 'open' ? 'مفتوح' : `انتهى (${m.scoreA}-${m.scoreB})`}</span></div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {m.status === 'open' && <>
+                    <div className="flex items-center gap-1 bg-neutral-900 p-1 rounded-xl border border-neutral-800"><span className="text-[10px] px-1">{m.teamA}</span><button onClick={() => db.collection('matches').doc(m.id).update({ scoreA: Math.max(0, (m.scoreA||0)-1) })} className="w-5 h-5 bg-neutral-800 text-white rounded">-</button><span className="font-mono font-bold text-amber-400 px-1">{m.scoreA||0}</span><button onClick={() => db.collection('matches').doc(m.id).update({ scoreA: (m.scoreA||0)+1 })} className="w-5 h-5 bg-amber-500 text-black rounded">+</button></div>
+                    <div className="flex items-center gap-1 bg-neutral-900 p-1 rounded-xl border border-neutral-800"><span className="text-[10px] px-1">{m.teamB}</span><button onClick={() => db.collection('matches').doc(m.id).update({ scoreB: Math.max(0, (m.scoreB||0)-1) })} className="w-5 h-5 bg-neutral-800 text-white rounded">-</button><span className="font-mono font-bold text-amber-400 px-1">{m.scoreB||0}</span><button onClick={() => db.collection('matches').doc(m.id).update({ scoreB: (m.scoreB||0)+1 })} className="w-5 h-5 bg-amber-500 text-black rounded">+</button></div>
+                    <button disabled={busyBtn} onClick={async () => { const w = await settleMatchAndReward(m, m.scoreA || 0, m.scoreB || 0); alert(`تم اعتماد النتيجة وصرف 35ج لـ ${w} فائز!`); }} className="px-3 py-1.5 bg-emerald-500 text-black font-black rounded-xl text-[10px]">اعتماد وصرف 35ج</button>
+                  </>}
+                  <button onClick={() => { if (confirm('حذف الماتش؟')) db.collection('matches').doc(m.id).delete(); }} className="px-2 py-1 bg-rose-600/30 text-rose-300 rounded-lg text-[10px]">✕</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-3xl space-y-2">
+              <h3 className="font-bold text-white border-b border-neutral-800 pb-2">🔥 العروض المنشورة ({offers.length}):</h3>
+              {offers.length === 0 ? <p className="text-neutral-500 text-center py-2">لا توجد عروض حالياً.</p> : offers.map(o => {
+                const cd = formatOfferCountdown(o.expiresAt, now);
+                return (
+                  <div key={o.id} className="p-2.5 bg-neutral-950 rounded-xl border border-neutral-800 flex justify-between items-center gap-2">
+                    <div>
+                      <strong className="text-amber-400">{o.title} — {o.price || 0}ج</strong>
+                      <span className="block text-[10px] text-neutral-400">{o.detail} | {o.deviceType || 'PS5'} ({o.duration || 60}د)</span>
+                      {cd && <span className={`text-[10px] font-mono font-bold ${cd.expired ? 'text-rose-400' : 'text-emerald-400'}`}>{cd.text}</span>}
+                    </div>
+                    <div className="flex gap-1">
+                      <button onClick={() => db.collection('offers').doc(o.id).update({ expiresAt: Date.now() + 24 * 3600000 })} className="px-2 py-1 bg-neutral-800 text-cyan-300 rounded-lg text-[10px]">+24س</button>
+                      <button onClick={() => db.collection('offers').doc(o.id).delete()} className="px-2 py-1 bg-rose-600 text-white rounded-lg text-[10px]">✕ حذف</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-3xl space-y-2">
+              <h3 className="font-bold text-white border-b border-neutral-800 pb-2">🏆 الأرقام القياسية ({hallRecords.length}):</h3>
+              {hallRecords.length === 0 ? <p className="text-neutral-500 text-center py-2">لا توجد أرقام موثقة.</p> : hallRecords.map(r => (
+                <div key={r.id} className="p-2 bg-neutral-950 rounded-xl border border-neutral-800 flex justify-between items-center">
+                  <div><strong className="text-white">{r.title}</strong> <span className="text-amber-400 font-mono">({r.score} - {r.holder})</span></div>
+                  <button onClick={() => db.collection('hall_of_fame').doc(r.id).delete()} className="px-2 py-1 bg-rose-600 text-white rounded-lg text-[10px]">✕ حذف</button>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-3xl space-y-2">
+              <div className="flex justify-between border-b border-neutral-800 pb-2"><h3 className="font-bold text-white">👑 الزعيم والتحديات ({challenges.length}):</h3><button onClick={() => { const t=prompt("عنوان الرقم:"), h=prompt("اللاعب:"), s=prompt("النتيجة:"); if(t&&h&&s){ const id=`hof-${Date.now()}`; db.collection('hall_of_fame').doc(id).set({id,title:t,holder:h,score:s,game:'PS5'}); } }} className="px-2 py-0.5 bg-amber-500 text-black font-black rounded text-[10px]">+ رقم قياسي</button></div>
+              {challenges.map(c => (
+                <div key={c.id} className="p-2 bg-neutral-950 rounded-xl border border-neutral-800 flex justify-between items-center">
+                  <div><strong className="text-white">{c.isBoss ? '👑 ' : ''}{c.playerName}</strong> <span className="text-amber-400">({c.score || 0})</span></div>
+                  <div className="flex gap-1">
+                    <button onClick={() => db.collection('challenges').doc(c.id).update({ score: (c.score || 0) + 1 })} className="px-2 py-0.5 bg-emerald-500 text-black rounded text-[10px]">+1</button>
+                    <button onClick={async () => { for (const x of challenges) { if (x.id !== c.id && x.isBoss) await db.collection('challenges').doc(x.id).update({ isBoss: false }); } await db.collection('challenges').doc(c.id).update({ isBoss: !c.isBoss }); }} className="px-2 py-0.5 bg-amber-500 text-black rounded text-[10px]">زعيم</button>
+                    <button onClick={() => db.collection('challenges').doc(c.id).delete()} className="px-2 py-0.5 bg-rose-600 text-white rounded text-[10px]">✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-3xl space-y-2">
+              <h3 className="font-bold text-white border-b border-neutral-800 pb-2">💡 مقترحات الزبائن ({suggestions.length}):</h3>
+              <div className="max-h-40 overflow-y-auto space-y-1 no-scrollbar">{suggestions.map(s => <div key={s.id} className="p-2 bg-neutral-950 rounded-xl border border-neutral-800 flex justify-between"><div><strong className="text-cyan-400">{s.author}:</strong> {s.wish}</div><button onClick={() => db.collection('suggestions').doc(s.id).delete()} className="text-rose-400">✕</button></div>)}</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-3xl space-y-2">
+              <h3 className="font-bold text-white border-b border-neutral-800 pb-2">🛡️ إدارة النادي والتقييمات (حذف للمدير فقط):</h3>
+              <div className="max-h-40 overflow-y-auto space-y-1 no-scrollbar">
+                {memories.map(m => <div key={m.id} className="p-1.5 bg-neutral-950 rounded border border-neutral-800 flex justify-between items-center gap-2"><span className="truncate">📸 {m.author}: {m.caption}</span><div className="flex gap-1"><button onClick={() => setViewDoc(m.image)} className="text-cyan-300">👁️</button><button onClick={() => { if (confirm('حذف الصورة؟')) db.collection('memories').doc(m.id).delete(); }} className="text-rose-400 font-bold">✕ حذف</button></div></div>)}
+                {reviews.map(r => <div key={r.id} className="p-1.5 bg-neutral-950 rounded border border-neutral-800 flex justify-between items-center gap-2"><span className="truncate">⭐ {r.author}: {r.comment}</span><button onClick={() => db.collection('reviews').doc(r.id).delete()} className="text-rose-400 font-bold">✕ حذف</button></div>)}
+              </div>
+            </div>
+            <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-3xl space-y-2">
+              <h3 className="font-bold text-white border-b border-neutral-800 pb-2">📜 سجل الأحداث وذاكرة AI ({adminLogs.length} / {aiMemory.length}):</h3>
+              <div className="max-h-40 overflow-y-auto space-y-1 no-scrollbar text-[10px]">
+                {adminLogs.map(l => <div key={l.id} className="p-1.5 bg-neutral-950 rounded border border-neutral-800 flex justify-between gap-2"><span className="text-amber-400 font-bold">{l.actor} [{l.actionType}]: <span className="text-neutral-300 font-normal">{l.detail}</span></span><span className="text-neutral-500 font-mono whitespace-nowrap">{l.time}</span></div>)}
+                {aiMemory.map(m => <div key={m.id} className="p-1.5 bg-neutral-950 rounded border border-emerald-500/20 flex justify-between"><span>💡 {m.lesson}</span><button onClick={() => db.collection('ai_memory').doc(m.id).delete()} className="text-rose-400">✕</button></div>)}
+              </div>
+            </div>
+          </div>
+          <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-3xl space-y-3">
+            <div className="flex justify-between items-center"><h3 className="font-bold text-white text-sm">📅 أرشيف الحسابات بالتاريخ:</h3><input type="date" value={selDate} onChange={e => setSelDate(e.target.value)} className="bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-1 text-white font-mono" /></div>
+            <div className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+              <div><span className="text-neutral-400 block">كاش الصالة:</span><strong className="text-emerald-400 font-mono">{completedSales.filter(s => s.date === selDate).reduce((a, s) => a + Number(s.totalCost || 0), 0)} ج</strong></div>
+              <div><span className="text-neutral-400 block">كاش الأونلاين:</span><strong className="text-blue-400 font-mono">{allBookings.filter(b => b.date === selDate && b.status === 'confirmed').reduce((a, b) => a + Number(b.remainingCashToTransfer ?? b.totalCost ?? 0), 0)} ج</strong></div>
+              <div><span className="text-neutral-400 block">المصاريف:</span><strong className="text-rose-400 font-mono">{expenses.filter(e => e.date === selDate).reduce((a, e) => a + Number(e.amount || 0), 0)} ج</strong></div>
+              <div><span className="text-amber-300 block font-bold">صافي الدرج:</span><strong className="text-amber-400 font-mono font-black">{completedSales.filter(s => s.date === selDate).reduce((a, s) => a + Number(s.totalCost || 0), 0) - expenses.filter(e => e.date === selDate).reduce((a, e) => a + Number(e.amount || 0), 0)} ج</strong></div>
+            </div>
+          </div>
+          {showEditCust && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4">
+              <form onSubmit={async e => {
+                e.preventDefault(); const f = e.target;
+                const np = f.ecPass.value.trim();
+                if (np.length < 4) return alert('الرقم السري لا يقل عن 4 حروف.');
+                const upd = { name: f.ecName.value.trim(), password: np, walletBalance: Number(f.ecWal.value || 0), hoursPlayed: Number(f.ecHrs.value || 0), xp: Number(f.ecXp.value || 50), status: f.ecStat.value, birthDate: f.ecBirth.value };
+                await db.collection('customers').doc(showEditCust.id || showEditCust.phone).set(upd, { merge: true });
+                logSystemEvent(adminShift, 'EDIT_CUSTOMER', `${showEditCust.phone} | تعديل بيانات/باسورد`);
+                setShowEditCust(null); playNotificationSound('cash'); alert('✓ تم تحديث بيانات العميل والرقم السري!');
+              }} className="bg-neutral-900 border border-amber-500/40 rounded-3xl p-5 max-w-sm w-full space-y-2.5">
+                <div className="flex justify-between"><h3 className="font-bold text-white">✏️ تعديل حساب ({showEditCust.phone})</h3><button type="button" onClick={() => setShowEditCust(null)}>✕</button></div>
+                <input required name="ecName" defaultValue={showEditCust.name} placeholder="الاسم" className="w-full bg-neutral-950 p-2 rounded-xl text-white" />
+                <div><label className="text-[10px] text-amber-300">🔑 الرقم السري الجديد (لو نسي القديم):</label><input required name="ecPass" defaultValue={showEditCust.password || ''} className="w-full bg-neutral-950 p-2 rounded-xl text-amber-400 font-mono" /></div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div><label className="text-[10px] text-neutral-400">المحفظة:</label><input name="ecWal" type="number" defaultValue={showEditCust.walletBalance || 0} className="w-full bg-neutral-950 p-2 rounded-xl text-emerald-400 font-mono" /></div>
+                  <div><label className="text-[10px] text-neutral-400">الساعات:</label><input name="ecHrs" type="number" step="0.1" defaultValue={showEditCust.hoursPlayed || 0} className="w-full bg-neutral-950 p-2 rounded-xl text-white font-mono" /></div>
+                  <div><label className="text-[10px] text-neutral-400">XP:</label><input name="ecXp" type="number" defaultValue={showEditCust.xp || 50} className="w-full bg-neutral-950 p-2 rounded-xl text-cyan-300 font-mono" /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input name="ecBirth" type="date" defaultValue={showEditCust.birthDate || ''} className="bg-neutral-950 p-2 rounded-xl text-white font-mono text-[10px]" />
+                  <select name="ecStat" defaultValue={showEditCust.status || 'active'} className="bg-neutral-950 p-2 rounded-xl text-white"><option value="active">نشط</option><option value="pending_approval">معلق</option><option value="banned">محظور</option></select>
+                </div>
+                <button className="w-full py-2.5 bg-amber-500 text-black font-black rounded-xl">حفظ التعديلات ✓</button>
+              </form>
+            </div>
+          )}
+          {showCashTopup && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"><form onSubmit={e => { e.preventDefault(); const ph=e.target.cPhone.value.trim(), amt=Number(e.target.cAmt.value||0); if(!ph||amt<=0) return; db.collection('customers').doc(ph).get().then(doc=>{ if(!doc.exists) return alert('العميل غير مسجل!'); db.collection('customers').doc(ph).set({walletBalance:firebase.firestore.FieldValue.increment(amt)},{merge:true}); const id=`top-${Date.now()}`; db.collection('sales').doc(id).set({id,devName:'شحن محفظة كاش',customerName:doc.data().name||ph,totalCost:amt,source:'in_store',shiftId:adminShift,date:todayStr,time:new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}),createdAt:new Date().toISOString()}); logSystemEvent(adminShift,'CASH_TOPUP',`${ph}: +${amt}ج`); setShowCashTopup(false); playNotificationSound('cash'); alert('✓ تم الشحن وإضافة المبلغ للدرج!'); }); }} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-3"><div className="flex justify-between"><h3 className="font-bold text-white">💰 شحن رصيد كاش للعميل</h3><button type="button" onClick={()=>setShowCashTopup(false)}>✕</button></div><input required name="cPhone" placeholder="رقم العميل" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white font-mono text-left" /><input required type="number" min={5} name="cAmt" placeholder="المبلغ (ج.م)" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white font-mono text-center" /><button className="w-full py-3 bg-emerald-500 text-black font-black rounded-xl">تأكيد الشحن</button></form></div>}
+          {showCreateCust && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"><form onSubmit={async e => { e.preventDefault(); const nm=e.target.cName.value.trim(), ph=e.target.cPhone.value.trim(), ps=e.target.cPass.value.trim()||'123456', bl=Number(e.target.cBal.value||0); if(!validateEgyptianPhone(ph)) return alert('رقم مصري غير صحيح.'); const f=e.target.cAva.files[0]; const av=f?await compressImageFile(f):null; db.collection('customers').doc(ph).set({name:nm||'لاعب',phone:ph,password:ps,avatarUrl:av,walletBalance:bl,xp:100,hoursPlayed:0,rewards:[],claimedAchievements:[],incidents:[],usedPromos:[],status:'active',myReferralCode:`TX-${ph.slice(-4)}`,createdAt:new Date().toISOString()}).then(()=>{setShowCreateCust(false);playNotificationSound('cash');alert('تم التفعيل!');}); }} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-3"><div className="flex justify-between"><h3 className="font-bold text-white">👤 تفعيل حساب زائر</h3><button type="button" onClick={()=>setShowCreateCust(false)}>✕</button></div><input required name="cName" placeholder="الاسم ثنائي" className="w-full bg-neutral-950 p-2.5 rounded-xl text-white" /><input required type="tel" name="cPhone" placeholder="01xxxxxxxxx" className="w-full bg-neutral-950 p-2.5 rounded-xl text-white font-mono text-left" /><input required name="cPass" defaultValue="123456" className="w-full bg-neutral-950 p-2.5 rounded-xl text-white" /><input type="number" min={0} defaultValue={0} name="cBal" className="w-full bg-neutral-950 p-2 rounded-xl text-white font-mono text-center" /><input type="file" name="cAva" accept="image/*" className="w-full bg-neutral-950 p-1 rounded-xl text-[10px]" /><button className="w-full py-2.5 bg-blue-600 text-white font-black rounded-xl">حفظ وتفعيل</button></form></div>}
+          {showNewOffer && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4">
+              <form onSubmit={async e => {
+                e.preventDefault(); const f = e.target;
+                const t = f.oTitle.value.trim(), d = f.oDet.value.trim(), pr = Number(f.oPrice.value || 0), opr = Number(f.oOld.value || 0);
+                const val = Number(f.oDurVal.value || 0), unit = f.oDurUnit.value;
+                const exp = val > 0 ? Date.now() + val * (unit === 'days' ? 86400000 : 3600000) : null;
+                const id = `off-${Date.now()}`;
+                await db.collection('offers').doc(id).set({ id, title: t, detail: d, price: pr, oldPrice: opr, deviceType: f.oDev.value, mode: f.oMode.value, duration: Number(f.oMins.value || 60), expiresAt: exp, date: todayStr, createdAt: new Date().toISOString() });
+                if (adminSecret) fetch(`${AI_WORKER_URL}/send-notification`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, title: `🔥 ${t} (${pr}ج)`, message: d }) }).catch(() => {});
+                logSystemEvent(adminShift, 'NEW_OFFER', `${t} (${pr}ج)`); setShowNewOffer(false); playNotificationSound('cash'); alert('✓ تم نشر العرض بالعد التنازلي وإرسال الإشعار!');
+              }} className="bg-neutral-900 border border-purple-500/40 rounded-3xl p-5 max-w-sm w-full space-y-2.5">
+                <div className="flex justify-between"><h3 className="font-bold text-white">📢 نشر عرض بسعر وعد تنازلي</h3><button type="button" onClick={() => setShowNewOffer(false)}>✕</button></div>
+                <input required name="oTitle" placeholder="عنوان العرض (مثال: عرض السهرة)" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white" />
+                <textarea required rows={2} name="oDet" placeholder="تفاصيل العرض (مثال: 3 ساعات + 2 كانز)" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white" />
+                <div className="grid grid-cols-2 gap-2">
+                  <input required type="number" min={1} name="oPrice" placeholder="سعر العرض (ج)" className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-amber-400 font-mono font-bold" />
+                  <input type="number" min={0} name="oOld" placeholder="السعر قبل (اختياري)" className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-neutral-400 font-mono" />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <select name="oDev" className="bg-neutral-950 p-2 rounded-xl text-white font-bold"><option value="PS5">PS5</option><option value="PS4">PS4</option></select>
+                  <select name="oMode" className="bg-neutral-950 p-2 rounded-xl text-amber-300 font-bold"><option value="single">فردي</option><option value="multi">ملتي</option></select>
+                  <select name="oMins" defaultValue={60} className="bg-neutral-950 p-2 rounded-xl text-emerald-400 font-mono">{DURATION_OPTIONS.map(o => <option key={o.mins} value={o.mins}>{o.mins}د</option>)}</select>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="number" min={0} name="oDurVal" placeholder="مدة العرض (0 = مفتوح)" defaultValue={24} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-rose-300 font-mono" />
+                  <select name="oDurUnit" className="bg-neutral-950 p-2 rounded-xl text-white font-bold"><option value="hours">ساعات</option><option value="days">أيام</option></select>
+                </div>
+                <button className="w-full py-2.5 bg-purple-600 text-white font-black rounded-xl">نشر وإرسال إشعار 🚀</button>
+              </form>
+            </div>
+          )}
+          {showPricing && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4">
+              <form onSubmit={e => {
+                e.preventDefault(); const f = e.target;
+                const newP = { PS5: { single: { per30: Number(f.p5s30.value), perHour: Number(f.p5s60.value) }, multi: { per30: Number(f.p5m30.value), perHour: Number(f.p5m60.value) } }, PS4: { single: { per30: Number(f.p4s30.value), perHour: Number(f.p4s60.value) }, multi: { per30: Number(f.p4m30.value), perHour: Number(f.p4m60.value) } } };
+                const nextSnacks = snacksMenu.filter(sn => !f[`del_${sn.id}`]?.checked).map(sn => ({ ...sn, price: Number(f[`sp_${sn.id}`]?.value ?? sn.price), stock: Number(f[`ss_${sn.id}`]?.value ?? (sn.stock ?? 20)), available: !f[`hide_${sn.id}`]?.checked }));
+                if (f.newSnName.value.trim()) nextSnacks.push({ id: `snk-${Date.now()}`, name: f.newSnName.value.trim(), price: Number(f.newSnPrice.value || 20), stock: Number(f.newSnStock.value || 20), icon: '🍽️', category: 'cold', hasSugarOption: !!f.newSnSugar?.checked, available: true });
+                db.collection('site_settings').doc('pricing').set(newP); db.collection('inventory').doc('snacks').set({ menu: nextSnacks });
+                logSystemEvent(adminShift, 'UPDATE_PRICES', 'تحديث الأسعار والكافتيريا'); setShowPricing(false); playNotificationSound('cash'); alert('✓ تم الحفظ بنجاح!');
+              }} className="bg-neutral-900 border border-amber-500/40 rounded-3xl p-5 max-w-lg w-full space-y-3 max-h-[88vh] overflow-y-auto no-scrollbar">
+                <div className="flex justify-between border-b border-neutral-800 pb-2"><h3 className="font-bold text-white">🏷️ الأسعار والكافتيريا والمخزون</h3><button type="button" onClick={() => setShowPricing(false)}>✕</button></div>
+                <strong className="text-amber-400 block">🎮 PS5 VIP (30د / ساعة):</strong>
+                <div className="grid grid-cols-4 gap-2 text-[10px]"><div><span>فردي30</span><input name="p5s30" defaultValue={pricing.PS5?.single?.per30||50} className="w-full bg-neutral-950 p-1.5 rounded text-white font-mono" /></div><div><span>فردي60</span><input name="p5s60" defaultValue={pricing.PS5?.single?.perHour||100} className="w-full bg-neutral-950 p-1.5 rounded text-white font-mono" /></div><div><span>ملتي30</span><input name="p5m30" defaultValue={pricing.PS5?.multi?.per30||60} className="w-full bg-neutral-950 p-1.5 rounded text-white font-mono" /></div><div><span>ملتي60</span><input name="p5m60" defaultValue={pricing.PS5?.multi?.perHour||120} className="w-full bg-neutral-950 p-1.5 rounded text-white font-mono" /></div></div>
+                <strong className="text-blue-400 block">🎮 PS4 Pro (30د / ساعة):</strong>
+                <div className="grid grid-cols-4 gap-2 text-[10px]"><div><span>فردي30</span><input name="p4s30" defaultValue={pricing.PS4?.single?.per30||35} className="w-full bg-neutral-950 p-1.5 rounded text-white font-mono" /></div><div><span>فردي60</span><input name="p4s60" defaultValue={pricing.PS4?.single?.perHour||70} className="w-full bg-neutral-950 p-1.5 rounded text-white font-mono" /></div><div><span>ملتي30</span><input name="p4m30" defaultValue={pricing.PS4?.multi?.per30||45} className="w-full bg-neutral-950 p-1.5 rounded text-white font-mono" /></div><div><span>ملتي60</span><input name="p4m60" defaultValue={pricing.PS4?.multi?.perHour||90} className="w-full bg-neutral-950 p-1.5 rounded text-white font-mono" /></div></div>
+                <strong className="text-emerald-400 block pt-2 border-t border-neutral-800">🍔 الكافتيريا (سعر / كمية / إخفاء / حذف):</strong>
+                <div className="space-y-1.5">{snacksMenu.map(sn => <div key={sn.id} className="grid grid-cols-6 gap-1.5 items-center bg-neutral-950 p-1.5 rounded-xl border border-neutral-800 text-[10px]"><span className="col-span-2 text-white font-bold truncate">{sn.icon} {sn.name}</span><input name={`sp_${sn.id}`} type="number" defaultValue={sn.price} className="bg-neutral-900 p-1 rounded text-amber-400 font-mono text-center" /><input name={`ss_${sn.id}`} type="number" defaultValue={sn.stock??20} className="bg-neutral-900 p-1 rounded text-cyan-300 font-mono text-center" /><label className="text-center text-neutral-400"><input type="checkbox" name={`hide_${sn.id}`} defaultChecked={sn.available===false} /> إخفاء</label><label className="text-center text-rose-400"><input type="checkbox" name={`del_${sn.id}`} /> حذف</label></div>)}</div>
+                <div className="p-2 bg-neutral-950 rounded-xl border border-dashed border-emerald-500/40 grid grid-cols-5 gap-1.5 items-center text-[10px]"><input name="newSnName" placeholder="+ صنف جديد" className="col-span-2 bg-neutral-900 p-1.5 rounded text-white" /><input name="newSnPrice" type="number" placeholder="السعر" className="bg-neutral-900 p-1.5 rounded text-amber-400 font-mono" /><input name="newSnStock" type="number" placeholder="الكمية" className="bg-neutral-900 p-1.5 rounded text-cyan-300 font-mono" /><label className="text-center text-amber-200"><input type="checkbox" name="newSnSugar" /> بسكر؟</label></div>
+                <button className="w-full py-3 bg-amber-500 text-black font-black rounded-xl">حفظ الكل ➔</button>
+              </form>
+            </div>
+          )}
+          {showEditBooking && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4">
+              <form onSubmit={e => {
+                e.preventDefault(); const f = e.target;
+                const dType = f.bDevType.value, mode = f.bMode.value, dur = Number(f.bDur.value);
+                const inc = f.bIncident.value.trim(), fee = Number(f.bDmgFee.value || 0);
+                const prevDevs = showEditBooking.bookedDevices || [];
+                const nextDevs = prevDevs.length > 1 ? prevDevs.map((d, i) => i === 0 ? { ...d, type: dType, mode, duration: dur } : d) : [{ id: 1, type: dType, mode, duration: dur }];
+                const upd = { customerName: f.bName.value.trim(), phone: f.bPhone.value.trim(), date: f.bDate.value, time: f.bTime.value, duration: dur, bookedDevices: nextDevs, devicesSummary: prevDevs.length > 1 ? showEditBooking.devicesSummary : `جهاز 1: ${dType} (${mode==='multi'?'ملتي':'فردي'}) لمدة ${dur}د`, snacksSummary: f.bSnacks.value.trim(), totalCost: Number(f.bCost.value), status: f.bStatus.value, incidentNote: inc, damageFee: fee };
+                db.collection('bookings').doc(showEditBooking.id).update(upd);
+                if ((inc || fee > 0) && upd.phone) db.collection('customers').doc(upd.phone).set({ incidents: firebase.firestore.FieldValue.arrayUnion({ note: inc || 'مشكلة بالذراع/الجهاز', damageFee: fee, bookingRef: showEditBooking.ref, date: todayStr }) }, { merge: true });
+                logSystemEvent(adminShift, 'EDIT_BOOKING', `${showEditBooking.ref}: ${upd.totalCost}ج`); setShowEditBooking(null); playNotificationSound('cash'); alert('✓ تم تعديل الحجز بنجاح!');
+              }} className="bg-neutral-900 border border-cyan-500/40 rounded-3xl p-5 max-w-md w-full space-y-2.5 max-h-[90vh] overflow-y-auto no-scrollbar">
+                <div className="flex justify-between border-b border-neutral-800 pb-2"><h3 className="font-bold text-white">✏️ تعديل الحجز ({showEditBooking.ref})</h3><button type="button" onClick={() => setShowEditBooking(null)}>✕</button></div>
+                <div className="grid grid-cols-2 gap-2"><input name="bName" defaultValue={showEditBooking.customerName} className="bg-neutral-950 p-2 rounded-xl text-white" /><input name="bPhone" defaultValue={showEditBooking.phone} className="bg-neutral-950 p-2 rounded-xl text-white font-mono" /></div>
+                <div className="grid grid-cols-2 gap-2"><input name="bDate" type="date" defaultValue={showEditBooking.date} className="bg-neutral-950 p-2 rounded-xl text-white font-mono" /><input name="bTime" type="time" defaultValue={showEditBooking.time} className="bg-neutral-950 p-2 rounded-xl text-white font-mono" /></div>
+                <div className="grid grid-cols-3 gap-2">
+                  <select name="bDevType" defaultValue={showEditBooking.bookedDevices?.[0]?.type || ((showEditBooking.devicesSummary||'').includes('PS5') ? 'PS5' : 'PS4')} className="bg-neutral-950 p-2 rounded-xl text-white font-bold"><option value="PS5">PS5 VIP</option><option value="PS4">PS4 Pro</option></select>
+                  <select name="bMode" defaultValue={showEditBooking.bookedDevices?.[0]?.mode || 'single'} className="bg-neutral-950 p-2 rounded-xl text-amber-300 font-bold"><option value="single">فردي</option><option value="multi">ملتي</option></select>
+                  <select name="bDur" defaultValue={showEditBooking.duration || 30} className="bg-neutral-950 p-2 rounded-xl text-emerald-400 font-mono">{DURATION_OPTIONS.map(o => <option key={o.mins} value={o.mins}>{o.mins}د</option>)}</select>
+                </div>
+                <input name="bSnacks" defaultValue={showEditBooking.snacksSummary} placeholder="الطلبات" className="w-full bg-neutral-950 p-2 rounded-xl text-white" />
+                <div className="grid grid-cols-2 gap-2"><div><label className="text-[10px] text-neutral-400">الحساب النهائي:</label><input name="bCost" type="number" defaultValue={showEditBooking.totalCost} className="w-full bg-neutral-950 p-2 rounded-xl text-amber-400 font-mono font-bold" /></div><div><label className="text-[10px] text-neutral-400">الحالة:</label><select name="bStatus" defaultValue={showEditBooking.status} className="w-full bg-neutral-950 p-2 rounded-xl text-white"><option value="confirmed">مؤكد</option><option value="awaiting_admin_approval">معلق</option><option value="rejected">مرفوض</option><option value="cancelled_emergency">إلغاء طوارئ</option></select></div></div>
+                <div className="p-2.5 bg-rose-500/10 border border-rose-500/30 rounded-2xl space-y-2"><span className="text-rose-300 font-bold block text-[11px]">⚠️ تسجيل مشكلة / تلف بسبب العميل:</span><input name="bIncident" defaultValue={showEditBooking.incidentNote||''} placeholder="وصف المشكلة" className="w-full bg-neutral-950 p-2 rounded-xl text-white" /><input name="bDmgFee" type="number" min={0} defaultValue={showEditBooking.damageFee||0} placeholder="غرامة التلف (ج)" className="w-full bg-neutral-950 p-2 rounded-xl text-rose-400 font-mono" /></div>
+                <button className="w-full py-3 bg-cyan-500 text-black font-black rounded-xl">حفظ التعديلات ➔</button>
+              </form>
+            </div>
+          )}
+          {showWalkIn && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"><form onSubmit={e => { e.preventDefault(); const dev=devices.find(d=>d.id===e.target.wDev.value); if(!dev) return alert('اختر شاشة!'); const tMins=Number(e.target.wLimit.value||0); const ses={ id:`ses-${Date.now()}`, deviceId:dev.id, devName:dev.name, devType:dev.type, customerName:e.target.wName.value.trim()||'زبون صالة', mode:e.target.wMode.value, controllers:e.target.wCtrl.value.trim()||'C1, C2', targetMins: tMins > 0 ? tMins : null, startTime:new Date().toISOString(), snacksCost:0, snackItems:[], shiftId:adminShift, source:'in_store' }; db.collection('sessions').doc(ses.id).set(ses); db.collection('devices').doc(dev.id).update({status:'busy'}); setShowWalkIn(false); playNotificationSound('cash'); }} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-3"><div className="flex justify-between"><h3 className="font-bold text-white">تسجيل زبون صالة</h3><button type="button" onClick={()=>setShowWalkIn(false)}>✕</button></div><input required name="wName" defaultValue="زبون صالة" className="w-full bg-neutral-950 p-2.5 rounded-xl text-white" /><select required name="wDev" className="w-full bg-neutral-950 p-2.5 rounded-xl text-white font-bold"><option value="">-- اختر شاشة --</option>{devices.filter(d=>d.status==='available').map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select><div className="grid grid-cols-3 gap-2"><select name="wMode" className="bg-neutral-950 p-2 rounded-xl text-amber-300"><option value="single">فردي</option><option value="multi">ملتي</option></select><input name="wCtrl" defaultValue="C1, C2" className="bg-neutral-950 p-2 rounded-xl text-cyan-300 font-mono" /><input name="wLimit" type="number" min={0} placeholder="تنبيه(د)" className="bg-neutral-950 p-2 rounded-xl text-rose-300 font-mono" /></div><button className="w-full py-3 bg-amber-500 text-black font-black rounded-xl">بدء التشغيل 🎮</button></form></div>}
+          {showConfig && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4">
+              <form onSubmit={e => {
+                e.preventDefault(); const f = e.target;
+                const parsedPromos = f.cPromo.value.split(',').map(x => x.trim()).filter(Boolean).map(p => { const [c, pct] = p.split(':'); return { code: (c || '').toUpperCase(), percent: Number(pct || 5), active: true }; });
+                const newCfg = { ...config, loungeName: f.cN.value.trim(), cityLocation: f.cC.value.trim(), phone: f.cP.value.trim(), whatsappNumber: f.cW.value.trim(), wallets: { vodafone: f.wVf.value.trim(), instapay: f.wIp.value.trim(), orange: f.wOr.value.trim(), etisalat: f.wEt.value.trim(), wepay: f.wWe.value.trim() }, graceMinutes: Number(f.cGrace.value || 5), promoCodes: parsedPromos, openingHours: f.cH.value.trim(), mapsUrl: f.cM.value.trim(), partyTax: Number(f.cTax.value || 200), closingSlogan: f.cSlogan.value.trim(), socialLinks: { facebook: f.cFB.value.trim(), instagram: f.cIG.value.trim(), tiktok: f.cTT.value.trim() }, termsText: f.cT.value.trim() };
+                db.collection('site_settings').doc('config').set(newCfg).then(() => { setShowConfig(false); playNotificationSound('cash'); alert('تم حفظ كل الإعدادات سحابياً!'); });
+              }} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 max-w-lg w-full space-y-2.5 max-h-[90vh] overflow-y-auto no-scrollbar">
+                <div className="flex justify-between border-b border-neutral-800 pb-2"><h3 className="font-bold text-white">⚙️ إعدادات الصالة والهوية كاملة</h3><button type="button" onClick={()=>setShowConfig(false)}>✕</button></div>
+                <div className="grid grid-cols-2 gap-2"><input required name="cN" defaultValue={config.loungeName} placeholder="اسم الصالة" className="bg-neutral-950 p-2 rounded-xl text-white font-bold" /><input required name="cC" defaultValue={config.cityLocation} placeholder="المدينة" className="bg-neutral-950 p-2 rounded-xl text-white" /><input required name="cP" defaultValue={config.phone} placeholder="رقم الكاشير" className="bg-neutral-950 p-2 rounded-xl text-white font-mono" /><input required name="cW" defaultValue={config.whatsappNumber} placeholder="واتساب (201...)" className="bg-neutral-950 p-2 rounded-xl text-white font-mono" /></div>
+                <span className="text-[10px] text-amber-400 font-bold block">💳 أرقام المحافظ المتاحة (اترك الفارغ ليختفي من الدفع):</span>
+                <div className="grid grid-cols-3 gap-1.5 text-[10px]"><input name="wVf" defaultValue={config.wallets?.vodafone ?? config.phone} placeholder="فودافون كاش" className="bg-neutral-950 p-1.5 rounded-xl text-white font-mono" /><input name="wIp" defaultValue={config.wallets?.instapay || ''} placeholder="إنستا باي" className="bg-neutral-950 p-1.5 rounded-xl text-white font-mono" /><input name="wOr" defaultValue={config.wallets?.orange || ''} placeholder="أورانج" className="bg-neutral-950 p-1.5 rounded-xl text-white font-mono" /><input name="wEt" defaultValue={config.wallets?.etisalat || ''} placeholder="اتصالات" className="bg-neutral-950 p-1.5 rounded-xl text-white font-mono" /><input name="wWe" defaultValue={config.wallets?.wepay || ''} placeholder="وي باي" className="bg-neutral-950 p-1.5 rounded-xl text-white font-mono" /><input name="cGrace" type="number" defaultValue={config.graceMinutes ?? 5} placeholder="سماح(د)" className="bg-neutral-950 p-1.5 rounded-xl text-emerald-300 font-mono" /></div>
+                <input name="cPromo" defaultValue={(config.promoCodes || [{ code: 'TWIX5', percent: 5 }]).map(x => `${x.code}:${x.percent}`).join(', ')} placeholder="أكواد الخصم (مثال: TWIX5:5, VIP10:10)" className="w-full bg-neutral-950 p-2 rounded-xl text-amber-300 font-mono" />
+                <input required name="cH" defaultValue={config.openingHours} placeholder="مواعيد العمل" className="w-full bg-neutral-950 p-2 rounded-xl text-white" />
+                <input required name="cM" defaultValue={config.mapsUrl} placeholder="رابط Google Maps" className="w-full bg-neutral-950 p-2 rounded-xl text-white font-mono text-left" />
+                <div className="grid grid-cols-3 gap-2"><input name="cFB" defaultValue={config.socialLinks?.facebook} placeholder="فيسبوك" className="bg-neutral-950 p-1.5 rounded-xl text-white text-[10px]" /><input name="cIG" defaultValue={config.socialLinks?.instagram} placeholder="إنستجرام" className="bg-neutral-950 p-1.5 rounded-xl text-white text-[10px]" /><input name="cTT" defaultValue={config.socialLinks?.tiktok} placeholder="تيك توك" className="bg-neutral-950 p-1.5 rounded-xl text-white text-[10px]" /></div>
+                <div className="grid grid-cols-2 gap-2"><input type="number" name="cTax" defaultValue={config.partyTax||200} placeholder="رسوم الحفلة" className="bg-neutral-950 p-2 rounded-xl text-amber-400 font-mono" /><input name="cSlogan" defaultValue={config.closingSlogan} placeholder="الشعار الختامي" className="bg-neutral-950 p-2 rounded-xl text-white" /></div>
+                <textarea rows={3} name="cT" defaultValue={config.termsText} className="w-full bg-neutral-950 p-2 rounded-xl text-white text-[11px]" />
+                <button className="w-full py-2.5 bg-amber-500 text-black font-black rounded-xl">حفظ الإعدادات ➔</button>
+              </form>
+            </div>
+          )}
+          {showPin && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4">
+              <form onSubmit={e => {
+                e.preventDefault(); const f = e.target;
+                const oldH = encodeShiftPin(f.oldPin.value), target = f.targetShift.value, np = f.newPin.value.trim();
+                const isMaster = oldH === (shiftHashes.master || DEFAULT_SHIFT_HASHES.master);
+                const isOldValid = oldH === shiftHashes[target];
+                if (!isMaster && !isOldValid) return alert('⚠️ يجب إدخال الرقم السري القديم للشفت أو رمز المالك الرئيسي (Master PIN)!');
+                if (np.length < 4) return alert('الرقم السري الجديد لا يقل عن 4 أرقام.');
+                const nh = { ...shiftHashes, [target]: encodeShiftPin(np) };
+                db.collection('site_settings').doc('admin_security').set(nh, { merge: true }).then(() => {
+                  logSystemEvent(adminShift, 'CHANGE_PIN', `تغيير رمز ${target}`); setShowPin(false); playNotificationSound('cash'); alert('✓ تم تشفير وتحديث الرقم السري بنجاح!');
+                });
+              }} className="bg-neutral-900 border border-purple-500/40 rounded-3xl p-6 max-w-sm w-full space-y-3">
+                <div className="flex justify-between"><h3 className="font-bold text-white">🔑 تغيير أرقام الشفتات والمالك</h3><button type="button" onClick={() => setShowPin(false)}>✕</button></div>
+                <select name="targetShift" className="w-full bg-neutral-950 p-2.5 rounded-xl text-amber-300 font-bold"><option value="shift_1">تغيير رقم شِفت 1</option><option value="shift_2">تغيير رقم شِفت 2</option><option value="master">تغيير رمز المالك (Master PIN)</option></select>
+                <input required type="password" inputMode="numeric" name="oldPin" placeholder="الرقم القديم أو رمز المالك (للمنسي)" className="w-full bg-neutral-950 p-2.5 rounded-xl text-white text-center font-mono" />
+                <input required type="password" inputMode="numeric" name="newPin" placeholder="الرقم السري الجديد (4+ أرقام)" className="w-full bg-neutral-950 p-2.5 rounded-xl text-emerald-400 text-center font-mono" />
+                <button className="w-full py-2.5 bg-purple-600 text-white font-black rounded-xl">تغيير وتشفير 🔒</button>
+              </form>
+            </div>
+          )}
+          {showExpense && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4">
+              <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 max-w-sm w-full space-y-3">
+                <div className="flex justify-between"><h3 className="font-bold text-white">📉 مصاريف الشفت ({totExp}ج)</h3><button onClick={() => setShowExpense(false)}>✕</button></div>
+                <form onSubmit={e => { e.preventDefault(); const id = `exp-${Date.now()}`; db.collection('expenses').doc(id).set({ id, title: e.target.et.value.trim(), amount: Number(e.target.ea.value), shiftId: adminShift, date: todayStr, createdAt: new Date().toISOString() }); e.target.reset(); }} className="space-y-2">
+                  <input required name="et" placeholder="البند (شاي / كهرباء / صيانة...)" className="w-full bg-neutral-950 p-2 rounded-xl text-white" />
+                  <input required type="number" min={1} name="ea" placeholder="المبلغ" className="w-full bg-neutral-950 p-2 rounded-xl text-white font-mono text-center" />
+                  <button className="w-full py-2 bg-rose-600 text-white font-black rounded-xl">+ خصم من الدرج</button>
+                </form>
+                <div className="max-h-32 overflow-y-auto space-y-1 no-scrollbar">{curExp.map(ex => <div key={ex.id} className="p-2 bg-neutral-950 rounded-xl flex justify-between"><span>{ex.title} ({ex.amount}ج)</span><button onClick={() => db.collection('expenses').doc(ex.id).delete()} className="text-rose-400">✕</button></div>)}</div>
+              </div>
+            </div>
+          )}
+          {showDebt && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4">
+              <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 max-w-sm w-full space-y-3">
+                <div className="flex justify-between"><h3 className="font-bold text-white">📝 الشكك ({totUnpaidDebts}ج)</h3><button onClick={() => setShowDebt(false)}>✕</button></div>
+                <form onSubmit={e => { e.preventDefault(); const id = `dbt-${Date.now()}`; db.collection('debts').doc(id).set({ id, customerName: e.target.dn.value.trim(), amount: Number(e.target.da.value), note: e.target.dnt.value.trim(), paid: false, shiftId: adminShift, date: todayStr, createdAt: new Date().toISOString() }); e.target.reset(); }} className="space-y-2">
+                  <input required name="dn" placeholder="اسم العميل" className="w-full bg-neutral-950 p-2 rounded-xl text-white" />
+                  <input required type="number" min={1} name="da" placeholder="المبلغ" className="w-full bg-neutral-950 p-2 rounded-xl text-white font-mono text-center" />
+                  <input name="dnt" placeholder="ملاحظة" className="w-full bg-neutral-950 p-2 rounded-xl text-white" />
+                  <button className="w-full py-2 bg-amber-500 text-black font-black rounded-xl">+ تسجيل شكك</button>
+                </form>
+                <div className="max-h-32 overflow-y-auto space-y-1 no-scrollbar">
+                  {curDebts.filter(d => !d.paid).map(d => (
+                    <div key={d.id} className="p-2 bg-neutral-950 rounded-xl flex justify-between items-center">
+                      <span>{d.customerName} ({d.amount}ج)</span>
+                      <button onClick={() => {
+                        db.collection('debts').doc(d.id).update({ paid: true, paidDate: todayStr });
+                        const sid = `debtpay-${Date.now()}`;
+                        db.collection('sales').doc(sid).set({ id: sid, devName: 'تحصيل شكك قديم', customerName: d.customerName, totalCost: Number(d.amount), source: 'in_store', shiftId: adminShift, date: todayStr, time: new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' }), createdAt: new Date().toISOString() });
+                        logSystemEvent(adminShift, 'SETTLE_DEBT', `${d.customerName}: +${d.amount}ج للدرج`);
+                        playNotificationSound('cash');
+                      }} className="px-2 py-1 bg-emerald-500 text-black rounded font-bold text-[10px]">سداد للدرج ✓</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+          {showReport && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4">
+              <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-3 text-center">
+                <div className="flex justify-between"><h3 className="font-bold text-white">📊 تقرير الوردية ({adminShift})</h3><button onClick={() => setShowReport(false)}>✕</button></div>
+                <div className="p-3 bg-neutral-950 rounded-2xl text-right space-y-1">
+                  <div>💵 كاش الصالة: <strong className="text-emerald-400">{inStoreRev}ج</strong></div>
+                  <div>🌐 كاش الأونلاين: <strong className="text-blue-400">{onlineRev}ج</strong></div>
+                  <div>💳 مدفوع بالمحافظ: <strong className="text-cyan-400">{walletSpentToday}ج</strong></div>
+                  <div>📉 المصاريف: <strong className="text-rose-400">-{totExp}ج</strong></div>
+                  <div className="border-t border-neutral-800 pt-1 text-amber-400 font-bold">صافي الدرج: {netCash}ج</div>
+                </div>
+                <a href={`https://wa.me/${config.whatsappNumber}?text=${encodeURIComponent(`📊 تقرير ${config.loungeName} (${adminShift} - ${todayStr}):\n• كاش الصالة: ${inStoreRev}ج\n• كاش الأونلاين: ${onlineRev}ج\n• مدفوع محافظ: ${walletSpentToday}ج\n• مصاريف: ${totExp}ج\n• صافي الدرج: ${netCash}ج`)}`} target="_blank" className="w-full py-2.5 bg-emerald-600 text-white font-black rounded-xl block">📲 إرسال للواتساب</a>
+              </div>
+            </div>
+          )}
+          {receipt && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4">
+              <div className="bg-white text-black rounded-3xl p-6 max-w-xs w-full space-y-3">
+                <div id="printable-receipt" className="space-y-2 text-center border-b pb-3">
+                  <h2 className="font-black text-lg">{config.loungeName}</h2>
+                  <p className="text-[10px]">بون حساب ({receipt.ref || 'TWIX'}) — {config.phone}</p>
+                  <div className="text-[11px] text-right space-y-1 pt-2 border-t border-dashed">
+                    <div>الجهاز: <strong>{receipt.devName}</strong></div>
+                    <div>العميل: <strong>{receipt.customerName}</strong></div>
+                    <div>المدة: <strong>{receipt.durationMins} دقيقة</strong></div>
+                    {Array.isArray(receipt.snackItems) && receipt.snackItems.length > 0 && <div>الطلبات: <strong>{receipt.snackItems.map(x => `${x.name} (${x.price}ج)`).join('، ')}</strong></div>}
+                    {receipt.snacksSummary && <div>التفاصيل: <strong>{receipt.snacksSummary}</strong></div>}
+                    {receipt.controllersCheck && <div>الدراعات: <strong>{receipt.controllersCheck}</strong></div>}
+                  </div>
+                  <div className="text-base font-black pt-2 border-t border-dashed flex justify-between"><span>الإجمالي:</span><span>{receipt.totalCost} ج.م</span></div>
+                </div>
+                <div className="flex gap-2"><button onClick={() => window.print()} className="flex-1 py-2 bg-black text-white font-bold rounded-xl">🖨️ طباعة</button><button onClick={() => setReceipt(null)} className="flex-1 py-2 bg-neutral-200 font-bold rounded-xl">إغلاق</button></div>
+              </div>
+            </div>
+          )}
+          {showAIChat && (() => {
+            const curT = aiThreads.find(t => t.id === activeAiTid) || aiThreads[0];
+            const pushAi = (m) => setAiThreads(p => p.map(t => t.id === curT.id ? { ...t, title: t.msgs.length <= 1 && m.sender === 'user' ? (m.text || 'صورة/صوت').slice(0, 26) : t.title, msgs: [...t.msgs, m] } : t));
+            const newAiChat = () => { const id = `a-${Date.now()}`; setAiThreads(p => [{ id, title: 'جلسة إدارة جديدة', msgs: [{ sender: 'ai', text: 'جلسة جديدة يا مدير! اتكلم بالميكروفون أو ارفع صورة.' }] }, ...p]); setActiveAiTid(id); setShowAiHist(false); };
+            const sendAdminAI = async ({ text = '', audioBase64 = null } = {}) => {
+              const q = (text || aiQuery).trim(); if ((!q && !aiImg && !audioBase64) || aiLoading) return;
+              if (!adminSecret) return alert('أدخل ADMIN_AI_SECRET أولاً في الشريط الأصفر أعلى اللوحة!');
+              const imgSend = aiImg; const hist = curT.msgs.slice(-6).map(m => ({ sender: m.sender, text: m.text }));
+              pushAi({ sender: 'user', text: q || (audioBase64 ? '🎤 أمر صوتي' : '📸 صورة'), image: imgSend });
+              setAiQuery(''); setAiImg(null); setAiLoading(true);
+              try {
+                const res = await fetch(`${AI_WORKER_URL}/admin-chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, message: q, history: hist, imageBase64: imgSend, audioBase64, loungeContext: buildSmartAdminContext() }) });
+                const d = await res.json();
+                let execSummary = '';
+                if (Array.isArray(d?.actions) && d.actions.length > 0) {
+                  const resList = await executeAIActions(d.actions, 'شات AI المدير');
+                  if (resList.length) execSummary = '\n\n📌 نتيجة التنفيذ الفعلي:\n' + resList.join('\n');
+                }
+                pushAi({ sender: 'ai', text: (d?.reply || 'تم.') + execSummary });
+              } catch { pushAi({ sender: 'ai', text: `⚠️ تعذر الاتصال بالسحابة. ملخص سريع: كاش ${inStoreRev}ج | أونلاين ${onlineRev}ج | صافي ${netCash}ج.` }); }
+              finally { setAiLoading(false); }
+            };
+            return (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4">
+                <div className="bg-neutral-900 border border-amber-500/50 rounded-3xl p-5 max-w-md w-full space-y-3 shadow-2xl">
+                  <div className="flex justify-between items-center border-b border-neutral-800 pb-2"><span className="text-amber-400 font-black">🤖 المساعد التنفيذي للمدير</span><div className="flex gap-1.5"><button onClick={() => setShowAiHist(!showAiHist)} className="text-[10px] bg-neutral-800 text-cyan-300 px-2 py-0.5 rounded-lg">📜 السجل ({aiThreads.length})</button><button onClick={newAiChat} className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-lg">+ جديد</button><button onClick={() => setShowAIChat(false)} className="text-neutral-400 font-bold px-1">✕</button></div></div>
+                  {showAiHist && <div className="max-h-28 overflow-y-auto space-y-1 bg-neutral-950 p-2 rounded-xl border border-neutral-800 no-scrollbar">{aiThreads.map(t => <button key={t.id} onClick={() => { setActiveAiTid(t.id); setShowAiHist(false); }} className={`w-full text-right p-1.5 rounded-lg text-[10px] truncate ${t.id === activeAiTid ? 'bg-amber-500 text-black font-black' : 'text-neutral-300 hover:bg-neutral-900'}`}>{t.title}</button>)}</div>}
+                  <div className="h-64 overflow-y-auto space-y-2 p-2 bg-neutral-950 rounded-2xl border border-neutral-800 no-scrollbar">{curT.msgs.map((c, i) => <div key={i} className={`p-2.5 rounded-xl text-[11px] whitespace-pre-line ${c.sender === 'ai' ? 'bg-neutral-900 text-neutral-200 border border-neutral-800' : 'bg-amber-500 text-black font-bold mr-auto'}`}>{c.image && <img src={c.image} className="max-h-24 rounded-lg mb-1" />}{c.text}</div>)}{aiLoading && <div className="p-2 rounded-xl text-[11px] bg-neutral-900 text-amber-400 animate-pulse">⏳ جاري التحليل والتنفيذ...</div>}</div>
+                  {aiImg && <div className="relative w-fit"><img src={aiImg} className="max-h-16 rounded-lg border border-amber-500" /><button onClick={() => setAiImg(null)} className="absolute -top-1 -right-1 bg-rose-600 text-white rounded-full w-4 h-4 text-[9px]">✕</button></div>}
+                  <form onSubmit={e => { e.preventDefault(); sendAdminAI(); }} className="flex gap-1.5 items-center"><input disabled={aiLoading} value={aiQuery} onChange={e => setAiQuery(e.target.value)} placeholder="اسأل أو أمرني بصوتك..." className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-2.5 py-2 text-white text-[11px]" /><FilePickerButton onPick={setAiImg} label="📷" className="px-2 py-2 bg-neutral-800 text-cyan-300 rounded-xl font-bold" /><VoiceMicButton disabled={aiLoading} onTranscript={t => sendAdminAI({ text: t })} onAudioData={a => sendAdminAI({ audioBase64: a })} /><button disabled={aiLoading} className="px-3 py-2 bg-amber-500 text-black font-black rounded-xl">إرسال</button></form>
+                </div>
+              </div>
+            );
+          })()}
+          {viewDoc && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"><div className="bg-neutral-900 border border-neutral-700 rounded-3xl p-5 max-w-md w-full space-y-3 text-center"><div className="flex justify-between"><h3 className="font-bold text-white">معاينة</h3><button onClick={() => setViewDoc(null)}>✕</button></div><img src={viewDoc} className="max-h-[65vh] mx-auto rounded-xl object-contain" /><button onClick={() => setViewDoc(null)} className="w-full py-2 bg-neutral-800 text-white rounded-xl font-bold">إغلاق</button></div></div>}
+        </div>
+      );
+    }
+    ReactDOM.createRoot(document.getElementById('root')).render(<AppErrorBoundary><App /></AppErrorBoundary>);
+  </script>
+</body>
+</html>
