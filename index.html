@@ -1804,19 +1804,16 @@ if (addFee && deltaMins > 0) { const dt = b.bookedDevices?.[0]?.type || ((b.devi
 } else if (action === 'finish') upd.timerStatus = 'finished';
 await db.collection('bookings').doc(b.id).update(upd); logSystemEvent(adminShift, "TIMER_" + action.toUpperCase(), b.ref); playNotificationSound('click');
 };
-    const executeAIActions = async (actions = []) => {
+  const executeAIActions = async (actions = []) => {
 const res = [];
-const findC = (p) => {
-const ph = String(p.phone || p.customerPhone || '').replace(/^\+2/, '').replace(/\s+/g, '').trim();
-return (ph && allCustomers.find(c => c.phone === ph)) || (p.customerName && allCustomers.find(c => (c.name || '').includes(p.customerName.trim()))) || null;
-};
+const findC = (p) => { const ph = String(p.phone || p.customerPhone || '').replace(/^\+2/, '').replace(/\s+/g, '').trim(); return (ph && allCustomers.find(c => c.phone === ph)) || (p.customerName && allCustomers.find(c => (c.name || '').includes(p.customerName.trim()))) || null; };
+const findS = (p) => sessions.find(s => s.id === p.sessionId || s.deviceId === p.deviceId || (p.devName && s.devName.includes(p.devName)) || (p.customerName && (s.customerName || '').includes(p.customerName)));
 for (const act of actions) {
 const t = act?.type, p = act?.payload || {};
 try {
 if (t === 'UPDATE_DEVICE_PRICING' && p.deviceType && p.mode) {
 const cur = pricing[p.deviceType]?.[p.mode] || { per30: 50, perHour: 100 };
-await db.collection('site_settings').doc('pricing').set({ ...pricing, [p.deviceType]: { ...pricing[p.deviceType], [p.mode]: { per30: p.per30 ?? cur.per30, perHour: p.perHour ?? cur.perHour } } });
-res.push("✅ سعر " + p.deviceType);
+await db.collection('site_settings').doc('pricing').set({ ...pricing, [p.deviceType]: { ...pricing[p.deviceType], [p.mode]: { per30: p.per30 ?? cur.per30, perHour: p.perHour ?? cur.perHour } } }); res.push("✅ سعر " + p.deviceType);
 } else if (t === 'UPDATE_SNACK' || t === 'ADD_SNACK' || t === 'DELETE_SNACK') {
 let nxt = [...snacksMenu];
 if (t === 'ADD_SNACK' && p.name) nxt.push({ id: "snk-" + Date.now(), name: p.name, price: Number(p.price || 20), costPrice: Number(p.costPrice || 10), stock: Number(p.stock || 20), icon: '🍽️', hasSugarOption: !!p.hasSugarOption, available: true });
@@ -1825,14 +1822,7 @@ else nxt = nxt.map(s => (s.id === p.snackId || (p.name && s.name.includes(p.name
 await db.collection('inventory').doc('snacks').set({ menu: nxt }); res.push("✅ الكافتيريا");
 } else if (t === 'ADD_DEVICE' || t === 'UPDATE_DEVICE' || t === 'DELETE_DEVICE' || t === 'SET_DEVICE_GAMES') {
 if (t === 'ADD_DEVICE' && p.name) { const id = "d-" + Date.now(); await db.collection('devices').doc(id).set({ id, name: p.name, type: p.type || 'PS5', zone: p.zone || 'VIP', status: 'available', games: Array.isArray(p.games) ? p.games : [] }); }
-else {
-const dev = devices.find(d => d.id === p.deviceId || (p.name && d.name.includes(p.name)));
-if (dev) {
-if (t === 'DELETE_DEVICE') await db.collection('devices').doc(dev.id).delete();
-else if (t === 'SET_DEVICE_GAMES') await db.collection('devices').doc(dev.id).update({ games: Array.isArray(p.games) ? p.games : [] });
-else await db.collection('devices').doc(dev.id).update({ name: p.name ?? dev.name, type: p.type ?? dev.type, zone: p.zone ?? dev.zone, status: p.status ?? dev.status, games: p.games ?? dev.games });
-}
-}
+else { const dev = devices.find(d => d.id === p.deviceId || (p.name && d.name.includes(p.name))); if (dev) { if (t === 'DELETE_DEVICE') await db.collection('devices').doc(dev.id).delete(); else if (t === 'SET_DEVICE_GAMES') await db.collection('devices').doc(dev.id).update({ games: Array.isArray(p.games) ? p.games : [] }); else await db.collection('devices').doc(dev.id).update({ name: p.name ?? dev.name, type: p.type ?? dev.type, zone: p.zone ?? dev.zone, status: p.status ?? dev.status, games: p.games ?? dev.games }); } }
 res.push("✅ الأجهزة والألعاب");
 } else if (t === 'PUBLISH_OFFER' && p.title) {
 const id = "off-" + Date.now(), hrs = p.durationHours ? Number(p.durationHours) : (p.durationDays ? Number(p.durationDays) * 24 : 0);
@@ -1844,63 +1834,89 @@ const tgs = p.all ? offers : offers.filter(o => o.id === p.offerId || (p.title &
 for (const tg of tgs) await db.collection('offers').doc(tg.id).delete(); res.push("✅ مسح عروض (" + tgs.length + ")");
 } else if (t === 'TOGGLE_HAPPY_HOUR') {
 await db.collection('site_settings').doc('config').set({ happyHour: { active: !!p.active, discountPercent: Number(p.discountPercent ?? config.happyHour?.discountPercent ?? 15), startHour: Number(p.startHour ?? config.happyHour?.startHour ?? 12), endHour: Number(p.endHour ?? config.happyHour?.endHour ?? 16) } }, { merge: true }); res.push("✅ Happy Hour");
+} else if (t === 'CREATE_CUSTOMER' && p.phone) {
+const ph = String(p.phone).trim(); if (!validateEgyptianPhone(ph)) res.push("❌ رقم مصري غير صحيح");
+else { await db.collection('customers').doc(ph).set({ name: p.name || 'لاعب', phone: ph, password: p.password || '123456', walletBalance: Number(p.walletBalance || 0), prepaidHours: 0, xp: 100, hoursPlayed: 0, trustScore: 80, rewards: [], claimedAchievements: [], incidents: [], usedPromos: [], status: 'active', myReferralCode: "TX-" + ph.slice(-4), createdAt: new Date().toISOString() }); res.push("✅ إنشاء حساب " + ph); }
+} else if (t === 'CASH_TOPUP') {
+const tc = findC(p), amt = Number(p.amount || 0);
+if (tc && amt > 0) { await db.collection('customers').doc(tc.phone).set({ walletBalance: firebase.firestore.FieldValue.increment(amt) }, { merge: true }); await db.collection('sales').doc("top-" + Date.now()).set({ id: "top-" + Date.now(), devName: 'شحن كاش AI', customerName: tc.name, totalCost: amt, source: 'in_store', shiftId: adminShift, date: todayStr, createdAt: new Date().toISOString() }); res.push("✅ شحن كاش " + amt + "ج"); }
+} else if (t === 'VERIFY_BIRTHDAY') {
+const tc = findC(p); if (tc) { await db.collection('customers').doc(tc.phone).update(p.approved === false ? { birthDate: '', idCardImage: null, birthVerified: false, birthDocPending: false } : { birthVerified: true, birthDocPending: false }); res.push("✅ توثيق ميلاد " + tc.name); }
 } else if (t === 'EDIT_CUSTOMER' || t === 'ADJUST_WALLET' || t === 'APPROVE_CUSTOMER') {
 const tc = findC(p);
 if (!tc) res.push("❌ العميل غير موجود");
 else if (t === 'APPROVE_CUSTOMER') { await approveCustomerAccount(tc); res.push("✅ تفعيل " + tc.name); }
 else {
-const upd = {};
-if (p.name) upd.name = p.name; if (p.password) upd.password = p.password; if (p.status) upd.status = p.status;
+const upd = {}; if (p.name) upd.name = p.name; if (p.password) upd.password = p.password; if (p.status) upd.status = p.status;
 if (p.trustScore !== undefined) { upd.trustScore = Number(p.trustScore); upd.trustNote = p.trustNote || ''; }
 if (p.birthVerified !== undefined) { upd.birthVerified = !!p.birthVerified; upd.birthDocPending = false; }
 if (p.walletDelta ?? p.delta ?? p.amount) upd.walletBalance = Math.max(0, Number(tc.walletBalance || 0) + Number(p.walletDelta ?? p.delta ?? p.amount));
 if (p.prepaidHoursDelta) { upd.prepaidHours = Math.max(0, Number(tc.prepaidHours || 0) + Number(p.prepaidHoursDelta)); upd.prepaidDeviceType = p.prepaidDeviceType || 'PS5'; upd.prepaidExpiresAt = Date.now() + 30 * 86400000; }
 if (p.newPhone && p.newPhone !== tc.phone) await updateCustomerPhoneAndMigrate(tc.phone, p.newPhone, upd);
 else await db.collection('customers').doc(tc.phone).set(upd, { merge: true });
-res.push("✅ تحديث العميل " + tc.name);
+res.push("✅ تحديث " + tc.name);
 }
 } else if (t === 'APPROVE_WALLET_REQUEST' || t === 'REJECT_WALLET_REQUEST') {
 const w = walletRequests.find(x => x.id === p.requestId || (x.status === 'pending' && x.customerPhone === p.customerPhone));
 if (w) { if (t === 'APPROVE_WALLET_REQUEST') await approveWalletReq(w); else await db.collection('wallet_requests').doc(w.id).update({ status: 'rejected' }); res.push("✅ طلب شحن"); }
 } else if (t === 'RESOLVE_TABLE_REQUEST') {
-const r = inLoungeRequests.find(x => x.id === p.requestId || x.status !== 'done'); if (r) { await resolveTableReq(r, true); res.push("✅ تنفيذ طلب طاولة"); }
-} else if (t === 'EDIT_BOOKING' || t === 'CONTROL_TIMER') {
-const bk = allBookings.find(b => b.id === p.bookingId || b.ref === p.ref);
-if (bk) {
-if (t === 'CONTROL_TIMER') await controlBookingTimer(bk, p.action, Number(p.deltaMins || 0), !!p.addFee);
-else if (p.status === 'confirmed') await confirmBookingByAdmin(bk);
-else if (p.status === 'rejected') await rejectBookingByAdmin(bk);
-else await db.collection('bookings').doc(bk.id).update(Object.fromEntries(Object.entries(p).filter(([k]) => ['date','time','duration','totalCost','status','incidentNote'].includes(k))));
-res.push("✅ حجز " + bk.ref);
-}
+const r = inLoungeRequests.find(x => x.id === p.requestId || x.status !== 'done'); if (r) { await resolveTableReq(r, true); res.push("✅ تنفيذ طلب"); }
+} else if (t === 'EDIT_BOOKING' || t === 'CANCEL_BOOKING' || t === 'CONTROL_TIMER') {
+const bk = allBookings.find(b => b.id === p.bookingId || b.ref === p.ref || (p.customerName && (b.customerName || '').includes(p.customerName) && ['awaiting_admin_approval','confirmed'].includes(b.status)) || (p.phone && b.phone === p.phone && ['awaiting_admin_approval','confirmed'].includes(b.status)));
+if (!bk) res.push("❌ الحجز غير موجود");
+else if (t === 'CONTROL_TIMER') { await controlBookingTimer(bk, p.action, Number(p.deltaMins || 0), !!p.addFee); res.push("✅ عداد " + bk.ref); }
+else if (t === 'CANCEL_BOOKING' || p.status === 'rejected' || p.status === 'cancelled') { await rejectBookingByAdmin(bk); res.push("✅ إلغاء الحجز وإرجاع الرصيد/المخزون: " + bk.ref); }
+else if (p.status === 'confirmed') { await confirmBookingByAdmin(bk); res.push("✅ تأكيد " + bk.ref); }
+else { await db.collection('bookings').doc(bk.id).update(Object.fromEntries(Object.entries(p).filter(([k]) => ['date','time','duration','totalCost','status','incidentNote'].includes(k)))); res.push("✅ تعديل " + bk.ref); }
 } else if (t === 'START_SESSION') {
 const dev = devices.find(d => (d.id === p.deviceId || (p.name && d.name.includes(p.name))) && d.status === 'available') || devices.find(d => d.status === 'available');
-if (dev) {
-const sid = "ses-" + Date.now();
-await db.collection('sessions').doc(sid).set({ id: sid, deviceId: dev.id, devName: dev.name, devType: dev.type, customerName: p.customerName || 'زبون صالة', customerPhone: p.customerPhone || '', mode: p.mode || 'single', targetMins: p.targetMins || null, startTime: new Date().toISOString(), snacksCost: 0, snackItems: [], shiftId: adminShift, source: 'in_store' });
-await db.collection('devices').doc(dev.id).update({ status: 'busy' }); res.push("✅ بدء جلسة " + dev.name);
+if (dev) { const sid = "ses-" + Date.now(); await db.collection('sessions').doc(sid).set({ id: sid, deviceId: dev.id, devName: dev.name, devType: dev.type, customerName: p.customerName || 'زبون صالة', customerPhone: p.customerPhone || '', mode: p.mode || 'single', targetMins: p.targetMins || null, startTime: new Date().toISOString(), snacksCost: 0, snackItems: [], shiftId: adminShift, source: 'in_store' }); await db.collection('devices').doc(dev.id).update({ status: 'busy' }); res.push("✅ بدء " + dev.name); }
+} else if (t === 'CONTROL_SESSION' || t === 'ADD_SESSION_SNACK' || t === 'FINISH_SESSION') {
+const ses = findS(p);
+if (!ses) res.push("❌ الجلسة غير موجودة");
+else if (t === 'ADD_SESSION_SNACK') { const sn = snacksMenu.find(x => x.id === p.snackId || (p.name && x.name.includes(p.name))); if (sn) { addSnackToSes(ses, sn.id); res.push("✅ إضافة " + sn.name); } }
+else if (t === 'CONTROL_SESSION') {
+if (p.action === 'pause') await db.collection('sessions').doc(ses.id).update({ isPaused: true, pausedAtMs: Date.now() });
+else if (p.action === 'resume') await db.collection('sessions').doc(ses.id).update({ isPaused: false, pausedAtMs: null, pausedTotalSec: Number(ses.pausedTotalSec || 0) + Math.floor((Date.now() - (ses.pausedAtMs || Date.now())) / 1000) });
+else if (p.action === 'switch_mode') await db.collection('sessions').doc(ses.id).update({ mode: ses.mode === 'multi' ? 'single' : 'multi' });
+res.push("✅ تحديث جلسة");
+} else {
+const pSec = Number(ses.pausedTotalSec || 0) + (ses.isPaused && ses.pausedAtMs ? Math.floor((Date.now() - ses.pausedAtMs) / 1000) : 0);
+const mins = Math.max(1, Math.ceil((Math.max(0, Math.floor((Date.now() - new Date(ses.startTime).getTime()) / 1000) - pSec)) / 60));
+const tCost = calcDevicePrice(pricing, ses.devType, ses.mode, mins, config.graceMinutes || 5);
+await finishSes(ses, tCost + (ses.snacksCost || 0), mins, p.controllersCheck || 'سليمة', Number(p.damageFee || 0), !!p.payWallet);
+res.push("✅ تقفيل وبون " + ses.devName);
 }
 } else if (t === 'APPROVE_GIFT' || t === 'REJECT_GIFT') {
 const g = allGifts.find(x => x.id === p.giftId || x.status === 'pending_admin');
 if (g) { if (t === 'APPROVE_GIFT') await approveGiftWithSchedule(g, p.scheduledDate || todayStr, p.scheduledTime || '18:00', p.validDays || 7); else await db.collection('gifts').doc(g.id).update({ status: 'rejected' }); res.push("✅ الهدية"); }
 } else if (t === 'ADD_EXPENSE' && p.title) { const id = "exp-" + Date.now(); await db.collection('expenses').doc(id).set({ id, title: p.title, amount: Number(p.amount || 0), shiftId: adminShift, date: todayStr, createdAt: new Date().toISOString() }); res.push("✅ مصروف"); }
+else if (t === 'DELETE_EXPENSE' && p.id) { await db.collection('expenses').doc(p.id).delete(); res.push("✅ حذف مصروف"); }
 else if (t === 'ADD_DEBT' && p.customerName) { const id = "dbt-" + Date.now(); await db.collection('debts').doc(id).set({ id, customerName: p.customerName, amount: Number(p.amount || 0), note: p.note || '', paid: false, shiftId: adminShift, date: todayStr, createdAt: new Date().toISOString() }); res.push("✅ شكك"); }
 else if (t === 'SETTLE_DEBT') { const d = debts.find(x => x.id === p.debtId || (!x.paid && x.customerName.includes(p.customerName || '---'))); if (d) { await db.collection('debts').doc(d.id).update({ paid: true, paidDate: todayStr }); await db.collection('sales').doc("dp-" + Date.now()).set({ id: "dp-" + Date.now(), devName: 'سداد شكك', customerName: d.customerName, totalCost: Number(d.amount), source: 'in_store', shiftId: adminShift, date: todayStr, createdAt: new Date().toISOString() }); res.push("✅ سداد شكك"); } }
 else if (t === 'ADD_MATCH' && p.teamA) { const id = "m-" + Date.now(); await db.collection('matches').doc(id).set({ id, teamA: p.teamA, teamB: p.teamB || 'الخصم', time: p.time || '9:00 م', status: 'open', scoreA: 0, scoreB: 0, predictions: {}, createdAt: new Date().toISOString() }); res.push("✅ ماتش"); }
 else if (t === 'SETTLE_MATCH') { const tm = matches.find(x => x.id === p.matchId || x.status === 'open'); if (tm) { await settleMatchAndReward(tm, Number(p.scoreA || 0), Number(p.scoreB || 0)); res.push("✅ اعتماد ماتش"); } }
-else if (t === 'CREATE_TOURNAMENT' && p.title) { const id = "tr-" + Date.now(); await db.collection('tournaments').doc(id).set({ id, title: p.title, game: p.game || 'EA FC 25', entryFee: Number(p.entryFee || 50), prizeText: p.prizeText || '500ج', maxPlayers: Number(p.maxPlayers || 16), players: [], status: 'open', createdAt: new Date().toISOString() }); res.push("✅ بطولة"); }
+else if (t === 'DELETE_MATCH' && p.id) { await db.collection('matches').doc(p.id).delete(); res.push("✅ حذف ماتش"); }
+else if (t === 'CREATE_TOURNAMENT' && p.title) { const id = "tr-" + Date.now(); await db.collection('tournaments').doc(id).set({ id, title: p.title, game: p.game || 'EA FC 25', entryFee: Number(p.entryFee || 50), prizeText: p.prizeText || '500ج', maxPlayers: Number(p.maxPlayers || 16), players: [], status: 'open', bracketNote: '', createdAt: new Date().toISOString() }); res.push("✅ بطولة"); }
+else if (t === 'UPDATE_TOURNAMENT' || t === 'DELETE_TOURNAMENT') { const trn = tournaments.find(x => x.id === p.id || (p.title && x.title.includes(p.title))); if (trn) { if (t === 'DELETE_TOURNAMENT') await db.collection('tournaments').doc(trn.id).delete(); else await db.collection('tournaments').doc(trn.id).update(Object.fromEntries(Object.entries(p).filter(([k]) => ['status','winner','bracketNote'].includes(k)))); res.push("✅ بطولة"); } }
+else if (t === 'UPDATE_CHALLENGE') { const ch = challenges.find(x => x.id === p.id || (p.playerName && x.playerName.includes(p.playerName))); if (ch) { await db.collection('challenges').doc(ch.id).update({ score: p.score ?? ch.score, isBoss: p.isBoss ?? ch.isBoss }); res.push("✅ تحدي"); } }
 else if (t === 'DELETE_REVIEW' && p.id) { await db.collection('reviews').doc(p.id).delete(); res.push("✅ حذف تقييم"); }
 else if (t === 'DELETE_MEMORY' && p.id) { await db.collection('memories').doc(p.id).delete(); res.push("✅ حذف صورة"); }
 else if (t === 'DELETE_CHALLENGE' && p.id) { await db.collection('challenges').doc(p.id).delete(); res.push("✅ حذف تحدي"); }
+else if (t === 'DELETE_SUGGESTION' && p.id) { await db.collection('suggestions').doc(p.id).delete(); res.push("✅ حذف مقترح"); }
 else if (t === 'ADD_HALL_RECORD' && p.title) { const id = "hof-" + Date.now(); await db.collection('hall_of_fame').doc(id).set({ id, title: p.title, holder: p.holder || 'بطل', score: p.score || '10', game: p.game || 'PS5' }); res.push("✅ رقم قياسي"); }
-else if (t === 'UPDATE_CONFIG') { await db.collection('site_settings').doc('config').set({ ...config, ...Object.fromEntries(Object.entries(p).filter(([k]) => ['loungeName','phone','openingHours','partyTax'].includes(k))) }); res.push("✅ الإعدادات"); }
+else if (t === 'DELETE_HALL_RECORD' && p.id) { await db.collection('hall_of_fame').doc(p.id).delete(); res.push("✅ حذف رقم"); }
+else if (t === 'TOGGLE_FREEZE') { await db.collection('site_settings').doc('runtime').set({ globalFrozen: !!p.active }, { merge: true }); res.push("✅ تجميد: " + (p.active ? 'شغال' : 'متوقف')); }
+else if (t === 'SEND_NOTIFICATION' && adminSecret) { await fetch(AI_WORKER_URL + "/send-notification", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, title: p.title || config.loungeName, message: p.message || '' }) }); res.push("✅ إرسال إشعار"); }
+else if (t === 'CREATE_HANDOVER') { const id = "ho-" + Date.now(); await db.collection('shift_handovers').doc(id).set({ id, fromShift: adminShift, drawerCash: Number(p.drawerCash ?? netCash), controllersOk: p.controllersOk || 'سليمة', notes: p.notes || '', acceptedBy: '', date: todayStr, createdAt: new Date().toISOString() }); res.push("✅ تسليم شفت"); }
+else if (t === 'UPDATE_CONFIG') { await db.collection('site_settings').doc('config').set({ ...config, ...Object.fromEntries(Object.entries(p).filter(([k]) => ['loungeName','phone','whatsappNumber','openingHours','partyTax','cityLocation','mapsUrl','closingSlogan','termsText'].includes(k))) }); res.push("✅ الإعدادات"); }
 else if (t === 'LEARN_MEMORY' && p.lesson) { const id = "mem-" + Date.now(); await db.collection('ai_memory').doc(id).set({ id, lesson: p.lesson, createdAt: new Date().toISOString() }); res.push("✅ حفظ قاعدة"); }
 logSystemEvent('AI المدير', t, JSON.stringify(p).slice(0, 100));
 } catch (err) { res.push("❌ " + t + ": " + (err?.message || 'خطأ')); }
 }
 return res;
-};
-    useEffect(() => {
+};  
+ useEffect(() => {
 if (!adminShift || !aiPilotMode || !adminSecret) return;
 const checkMod = async (col, list, getTxt, getImg) => {
 for (const item of list.filter(x => !x.moderated).slice(0, 2)) {
@@ -1914,25 +1930,31 @@ else modRef.current[item.id] = false;
 } catch { modRef.current[item.id] = false; }
 }
 };
-const checkPendingAccounts = async () => {
-for (const c of allCustomers.filter(x => x.status === 'pending_approval' && !x.aiChecked).slice(0, 2)) {
+const checkAccountsAndBirthDocs = async () => {
+const targets = allCustomers.filter(x => (x.status === 'pending_approval' && !x.aiChecked) || (x.birthDocPending && x.idCardImage && !x.birthAiChecked)).slice(0, 2);
+for (const c of targets) {
 if (modRef.current["acc_" + c.phone]) continue; modRef.current["acc_" + c.phone] = true;
 try {
 const r = await fetch(AI_WORKER_URL + "/moderate", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, itemType: 'account_check', text: c.name, birthDate: c.birthDate || '', imageBase64: c.idCardImage || null }) });
 const d = await r.json();
-if (d?.safe) {
-await db.collection('customers').doc(c.phone).set({ status: 'active', aiChecked: true, birthVerified: !!(c.birthDate && c.idCardImage && d.idClear && d.birthMatches), birthDocPending: !!(c.birthDate && c.idCardImage && !(d.idClear && d.birthMatches)), aiAccountNote: d.reason || 'تم الفحص بالـ AI' }, { merge: true });
-logSystemEvent('AI الحسابات', 'AUTO_APPROVE_ACCOUNT', c.phone);
-} else await db.collection('customers').doc(c.phone).set({ aiChecked: true, aiAccountNote: d?.reason || 'يحتاج مراجعة المدير' }, { merge: true });
+const hasDoc = !!(c.birthDate && c.idCardImage);
+const docValid = hasDoc && !!d?.isRealDoc && !!d?.idClear && !!d?.birthMatches;
+const upd = { aiChecked: true, birthAiChecked: !!c.idCardImage, aiAccountNote: (d?.extractedBirthDate ? ("تاريخ الوثيقة: " + d.extractedBirthDate + " — ") : "") + (d?.reason || '') };
+if (c.status === 'pending_approval') {
+if (d?.safe && (!hasDoc || docValid)) { await approveCustomerAccount(c); }
+else { upd.status = 'pending_approval'; }
+}
+if (hasDoc) { upd.birthVerified = docValid; upd.birthDocPending = !docValid; }
+await db.collection('customers').doc(c.phone).set(upd, { merge: true });
 } catch { modRef.current["acc_" + c.phone] = false; }
 }
 };
 checkMod('memories', memories, m => m.caption, m => m.image);
 checkMod('reviews', reviews, r => r.author + ": " + r.comment);
 checkMod('challenges', challenges, c => c.playerName + " - " + c.stake);
-checkPendingAccounts();
-}, [adminShift, aiPilotMode, adminSecret, memories, reviews, challenges, allCustomers]);
-const runTrustScoreAI = async (c) => {
+checkAccountsAndBirthDocs();
+},[adminShift, aiPilotMode, adminSecret, memories, reviews, challenges, allCustomers]);
+    const runTrustScoreAI = async (c) => {
 if (!adminSecret) return alert('أدخل ADMIN_AI_SECRET أولاً!');
 const bks = allBookings.filter(b => b.phone === c.phone);
 const stats = { confirmed: bks.filter(b => b.status === 'confirmed').length, rejected: bks.filter(b => b.status === 'rejected').length, emergencyCancels: bks.filter(b => b.status === 'cancelled_emergency').length, onTheWayCount: bks.filter(b => !!b.onTheWayEta).length, incidents: (c.incidents || []).length };
