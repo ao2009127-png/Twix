@@ -411,7 +411,7 @@ setSquadUnreadMap(p => ({ ...p, [code]: unread }));
 }
 }, () => {}));
 return () => unsubs.forEach(u => u());
-}, [page, now]);
+}, [page]);
 useEffect(() => {
 if (!offers.length) return;
 const params = new URLSearchParams(window.location.search), offerId = params.get('offer'), targetPage = params.get('page'), refP = params.get('ref');
