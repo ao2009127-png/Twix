@@ -1670,46 +1670,32 @@ logSystemEvent(adminShift, 'CHANGE_CUST_PHONE', oldPh + " -> " + newPh);
 const dailyStats = {};
 const ensure = (d) => { if (!dailyStats[d]) dailyStats[d] = { inStoreCash: 0, onlineCash: 0, walletSpent: 0, expenses: 0, visits: 0 }; };
 completedSales.forEach(s => { const d = s.date || todayStr; ensure(d); dailyStats[d].inStoreCash += Number(s.totalCost || 0); dailyStats[d].visits += 1; });
-allBookings.forEach(b => {
-if ((b.status === 'confirmed' || b.status === 'cancelled_emergency') && b.date) {
-ensure(b.date);
-dailyStats[b.date].onlineCash += Number(b.status === 'cancelled_emergency' ? (b.emergencyUsedCost || 0) : (b.remainingCashToTransfer ?? b.totalCost ?? 0));
-dailyStats[b.date].walletSpent += Number(b.walletDeduction || 0); dailyStats[b.date].visits += 1;
-}
-});
+allBookings.forEach(b => { if ((b.status === 'confirmed' || b.status === 'cancelled_emergency') && b.date) { ensure(b.date); dailyStats[b.date].onlineCash += Number(b.status === 'cancelled_emergency' ? (b.emergencyUsedCost || 0) : (b.remainingCashToTransfer ?? b.totalCost ?? 0)); dailyStats[b.date].walletSpent += Number(b.walletDeduction || 0); dailyStats[b.date].visits += 1; } });
 expenses.forEach(e => { if (e.date) { ensure(e.date); dailyStats[e.date].expenses += Number(e.amount || 0); } });
 const sortedDays = Object.keys(dailyStats).sort().slice(-14);
 return {
-today: todayStr, activeShift: adminShift, pricing, happyHour: config.happyHour,
+today: todayStr, activeShift: adminShift, globalFrozen, pricing, happyHour: config.happyHour,
 devices: devices.map(d => ({ id: d.id, name: d.name, type: d.type, status: d.status, games: d.games || [] })),
+liveSessions: sessions.map(s => ({ id: s.id, deviceId: s.deviceId, devName: s.devName, customerName: s.customerName, customerPhone: s.customerPhone, mode: s.mode, isPaused: !!s.isPaused, snacksCost: s.snacksCost || 0, startTime: s.startTime })),
 snacksMenu: snacksMenu.map(s => ({ id: s.id, name: s.name, price: s.price, costPrice: s.costPrice || 0, stock: s.stock })),
 dailyStats: Object.fromEntries(sortedDays.map(k => [k, dailyStats[k]])),
 offers: offers.map(o => ({ id: o.id, title: o.title, price: o.price, deviceType: o.deviceType, duration: o.duration, expiresAt: o.expiresAt })),
 pendingBookings: allBookings.filter(b => b.status === 'awaiting_admin_approval').map(b => ({ id: b.id, ref: b.ref, customerName: b.customerName, phone: b.phone, date: b.date, time: b.time, totalCost: b.totalCost })),
-recentBookings: allBookings.slice(0, 25).map(b => ({ id: b.id, ref: b.ref, customerName: b.customerName, phone: b.phone, date: b.date, time: b.time, duration: b.duration, status: b.status, totalCost: b.totalCost })),
+recentBookings: allBookings.slice(0, 30).map(b => ({ id: b.id, ref: b.ref, customerName: b.customerName, phone: b.phone, date: b.date, time: b.time, duration: b.duration, status: b.status, totalCost: b.totalCost })),
+pendingBirthdays: allCustomers.filter(c => c.birthDate && c.idCardImage && !c.birthVerified).map(c => ({ name: c.name, phone: c.phone, birthDate: c.birthDate, aiAccountNote: c.aiAccountNote || '' })),
 pendingGifts: allGifts.filter(g => g.status === 'pending_admin'),
 pendingTableRequests: inLoungeRequests.filter(r => r.status !== 'done'),
 pendingWalletRequests: walletRequests.filter(w => w.status === 'pending').map(w => ({ id: w.id, customerName: w.customerName, customerPhone: w.customerPhone, amount: w.amount })),
-unpaidDebts: debts.filter(d => !d.paid),
-tournaments: tournaments.map(t => ({ id: t.id, title: t.title, status: t.status, players: (t.players || []).length })),
+unpaidDebts: debts.filter(d => !d.paid), expensesList: expenses.slice(0, 15),
+tournaments: tournaments.map(t => ({ id: t.id, title: t.title, status: t.status, entryFee: t.entryFee, players: (t.players || []).length })),
 matches: matches.map(m => ({ id: m.id, teamA: m.teamA, teamB: m.teamB, status: m.status })),
+challenges: challenges.map(c => ({ id: c.id, playerName: c.playerName, score: c.score || 0, isBoss: !!c.isBoss })),
+hallRecords, suggestions: suggestions.slice(0, 15), reviews: reviews.slice(0, 10).map(r => ({ id: r.id, author: r.author, rating: r.rating, comment: r.comment })),
 customersDirectory: allCustomers.map(c => ({ name: c.name, phone: c.phone, status: c.status, wallet: c.walletBalance || 0, prepaidHours: c.prepaidHours || 0, hours: c.hoursPlayed || 0, trustScore: c.trustScore ?? 80, birthDate: c.birthDate || '', birthVerified: !!c.birthVerified })),
-aiMemoryLessons: aiMemory.slice(0, 12).map(m => m.lesson)
+aiMemoryLessons: aiMemory.slice(0, 15).map(m => m.lesson)
 };
 };
-const confirmBookingByAdmin = async (b) => {
-const mins = Number(b.duration || 30), xpAdd = Math.round(mins * 1.5), hrsAdd = Number((mins / 60).toFixed(2)), mKey = getCairoMonthKey();
-if (!b.rewardedStats && b.phone) {
-const cRef = db.collection('customers').doc(b.phone);
-await db.runTransaction(async tx => {
-const s = await tx.get(cRef); if (!s.exists) return; const d = s.data(), nxtMXP = (d.monthKey === mKey ? Number(d.monthlyXP || 0) : 0) + xpAdd;
-tx.set(cRef, { hoursPlayed: Number(d.hoursPlayed || 0) + hrsAdd, xp: Number(d.xp || 0) + xpAdd, monthlyXP: nxtMXP, monthKey: mKey }, { merge: true });
-db.collection('public_ranks').doc(b.phone).set({ id: b.phone, name: d.name || b.customerName, monthlyXP: nxtMXP, monthKey: mKey, level: calculateInfiniteLevel((d.xp || 0) + xpAdd).level }, { merge: true });
-});
-}
-await db.collection('bookings').doc(b.id).update({ status: 'confirmed', timerStatus: 'scheduled', rewardedStats: true, confirmedByShift: adminShift });
-logSystemEvent(adminShift, 'CONFIRM_BOOKING', b.ref); playNotificationSound('cash');
-};
+
 const rejectBookingByAdmin = async (b) => {
 await db.collection('bookings').doc(b.id).update({ status: 'rejected' });
 if (b.phone && (Number(b.walletDeduction || 0) > 0 || Number(b.prepaidHoursDeducted || 0) > 0)) {
