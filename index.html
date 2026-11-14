@@ -86,6 +86,7 @@
     function playNotificationSound(type = 'click') {
       try {
         unlockAudio(); const ctx = sharedAudioCtx; if (!ctx) return;
+        if (type !== 'alarm' && type !== 'admin_new' && localStorage.getItem('twix_mute_sound') === '1') return;
         if (type === 'alarm' || type === 'admin_new') {
           const freqs = type === 'admin_new' ? [880, 1174, 1567] : [1046, 1318, 1046, 1318];
           freqs.forEach((f, idx) => {
