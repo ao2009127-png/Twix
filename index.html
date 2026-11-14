@@ -1658,7 +1658,36 @@
         const iv = setInterval(runPilot, 60000);
         return () => clearInterval(iv);
       }, [adminShift, aiPilotMode, adminSecret, allBookings.length, inLoungeRequests.length]);
-
+const [learningBusy, setLearningBusy] = useState(false);
+      const analyzeManagerStyle = async (force = false) => {
+        if (!adminSecret || learningBusy) return;
+        const logs = adminLogs.filter(l => l.actor === 'shift_1' || l.actor === 'shift_2').slice(0, 20);
+        if (logs.length < 3) { if (force) alert('اعمل كام حركة في اللوحة الأول (تأكيد/رفض/عروض/تمديد) عشان الـ AI يدرس أسلوبك!'); return; }
+        const lastTs = Number(localStorage.getItem('twix_last_style_learn') || 0);
+        const lastCnt = Number(localStorage.getItem('twix_last_style_cnt') || 0);
+        if (!force && (Date.now() - lastTs < 7200000) && (adminLogs.length - lastCnt < 10)) return;
+        setLearningBusy(true);
+        try {
+          const res = await fetch(`${AI_WORKER_URL}/learn-style`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adminSecret, recentActions: logs.map(l => `${l.actionType}: ${l.detail}`), existingLessons: aiMemory.map(m => m.lesson) })
+          });
+          const d = await res.json();
+          if (Array.isArray(d?.lessons) && d.lessons.length > 0) {
+            for (const ls of d.lessons.slice(0, 3)) {
+              const id = `mem-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+              await db.collection('ai_memory').doc(id).set({ id, lesson: ls, autoLearned: true, createdAt: new Date().toISOString() });
+            }
+            localStorage.setItem('twix_last_style_learn', String(Date.now()));
+            localStorage.setItem('twix_last_style_cnt', String(adminLogs.length));
+            if (force) { playNotificationSound('cash'); alert(`✓ الـ AI استنتج ${d.lessons.length} قواعد جديدة من أسلوب إدارتك!`); }
+          } else if (force) alert('أسلوبك الحالي متسجل بالفعل في ذاكرة الـ AI.');
+        } catch { if (force) alert('تعذر الاتصال بالـ AI حالياً.'); }
+        finally { setLearningBusy(false); }
+      };
+      useEffect(() => {
+        if (adminShift && aiPilotMode && adminSecret && adminLogs.length >= 8) analyzeManagerStyle(false);
+      }, [adminShift, aiPilotMode, adminSecret, adminLogs.length]);
       const handleAdminAuth = (e) => {
         e.preventDefault(); const h = encodeShiftPin(inputPin);
         if (h === shiftHashes.shift_1 || h === shiftHashes.shift_2 || h === shiftHashes.master) {
