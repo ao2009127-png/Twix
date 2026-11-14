@@ -455,7 +455,7 @@
       };
 
       return (
-        <div className="min-h-screen flex flex-col justify-between selection:bg-amber-500 selection:text-black bg-[#080808] text-[#f5f5f5]">
+        <div className={`min-h-screen flex flex-col justify-between selection:bg-amber-500 selection:text-black text-[#f5f5f5] ${custSettings.theme === 'midnight' ? 'bg-[#060c18]' : (custSettings.theme === 'oled' ? 'bg-black' : 'bg-[#080808]')} ${custSettings.fontSize === 'large' ? 'text-[15px]' : ''}`}>
           {globalFrozen && <div className="bg-rose-600 text-white font-black text-xs py-2.5 px-4 text-center animate-pulse sticky top-0 z-50">⚠️ تجميد طوارئ شامل نشط — جميع العدادات متوقفة مجاناً</div>}
           {myActiveBooking && activeTimer.state !== 'inactive' && activeTimer.state !== 'ended' && (
             <div className={`border-b py-2 px-4 sticky top-0 z-40 backdrop-blur ${remainingBookingSeconds <= 300 ? 'bg-rose-950/90 border-rose-500 animate-pulse' : 'bg-gradient-to-r from-amber-500/20 via-neutral-900 to-amber-500/20 border-amber-500/40'}`}>
