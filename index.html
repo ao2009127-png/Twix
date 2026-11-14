@@ -2059,11 +2059,23 @@ const [learningBusy, setLearningBusy] = useState(false);
               </div>
             </div>
             <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-3xl space-y-2">
-              <h3 className="font-bold text-white border-b border-neutral-800 pb-2">📜 سجل الأحداث وذاكرة AI ({adminLogs.length} / {aiMemory.length}):</h3>
+              <h3 className="font-bold text-white border-b border-neutral-800 pb-2">📜 سجل الأحداث وقرارات اللوحة ({adminLogs.length}):</h3>
               <div className="max-h-40 overflow-y-auto space-y-1 no-scrollbar text-[10px]">
                 {adminLogs.map(l => <div key={l.id} className="p-1.5 bg-neutral-950 rounded border border-neutral-800 flex justify-between gap-2"><span className="text-amber-400 font-bold">{l.actor} [{l.actionType}]: <span className="text-neutral-300 font-normal">{l.detail}</span></span><span className="text-neutral-500 font-mono whitespace-nowrap">{l.time}</span></div>)}
-                {aiMemory.map(m => <div key={m.id} className="p-1.5 bg-neutral-950 rounded border border-emerald-500/20 flex justify-between"><span>💡 {m.lesson}</span><button onClick={() => db.collection('ai_memory').doc(m.id).delete()} className="text-rose-400">✕</button></div>)}
               </div>
+            </div>
+          </div>
+          <div className="bg-neutral-900 border border-emerald-500/40 p-4 rounded-3xl space-y-2.5">
+            <div className="flex flex-wrap justify-between items-center gap-2 border-b border-neutral-800 pb-2">
+              <h3 className="font-bold text-emerald-400">🧠 ذاكرة وتعلّم الـ AI التلقائي من إدارتك ({aiMemory.length}):</h3>
+              <button type="button" disabled={learningBusy} onClick={() => analyzeManagerStyle(true)} className="px-3 py-1 bg-emerald-500 text-black font-black rounded-xl text-[10px]">{learningBusy ? '⏳ جاري التحليل...' : '🔄 حلّل أسلوبي الآن'}</button>
+            </div>
+            <form onSubmit={async e => { e.preventDefault(); const v = e.target.ruleTxt.value.trim(); if (!v) return; const id = `mem-${Date.now()}`; await db.collection('ai_memory').doc(id).set({ id, lesson: v, createdAt: new Date().toISOString() }); e.target.reset(); playNotificationSound('cash'); }} className="flex gap-2">
+              <input name="ruleTxt" placeholder="+ أضف قاعدة أو مبدأ للـ AI يلتزم به في إدارتك..." className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-1.5 text-white text-[11px]" />
+              <button className="px-3 py-1.5 bg-amber-500 text-black font-black rounded-xl text-[11px]">حفظ</button>
+            </form>
+            <div className="max-h-40 overflow-y-auto space-y-1 no-scrollbar text-[10px]">
+              {aiMemory.length === 0 ? <p className="text-neutral-500 text-center py-2">سيتعلم الـ AI أسلوبك تلقائياً من قراراتك في اللوحة وكلامك في الشات.</p> : aiMemory.map(m => <div key={m.id} className="p-2 bg-neutral-950 rounded-xl border border-emerald-500/20 flex justify-between items-center gap-2"><span>{m.autoLearned ? '🤖' : '📌'} {m.lesson}</span><button onClick={() => db.collection('ai_memory').doc(m.id).delete()} className="text-rose-400 font-bold">✕</button></div>)}
             </div>
           </div>
           <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-3xl space-y-3">
