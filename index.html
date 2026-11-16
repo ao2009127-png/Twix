@@ -1865,3 +1865,254 @@ async function executeCustomerCancellation({ b, config, lang }) {
   };
   return { updateCustomerPhoneAndMigrate, confirmBooking, rejectBooking, controlTimer, approveGift };
     }
+    function AdminQRScannerModal({ allBookings, confirmBooking, onClose, lang }) {
+  const { showAlert, toast } = useTwixUI();
+  const [facing, setFacing] = useState('environment'); const [camErr, setCamErr] = useState(''); const [manualCode, setManualCode] = useState('');
+  const videoRef = useRef(null); const canvasRef = useRef(null); const streamRef = useRef(null); const rafRef = useRef(null); const lockedRef = useRef(false);
+  const stopCam = () => { cancelAnimationFrame(rafRef.current); try { streamRef.current?.getTracks().forEach(t => t.stop()); } catch {} streamRef.current = null; };
+  const handleDecoded = async (raw) => {
+    if (!raw || lockedRef.current) return;
+    const code = String(raw).trim(), found = allBookings.find(b => b.ref === code || b.id === code || code.includes(b.ref) || code.includes(b.id));
+    if (!found) return toast(L('كود غير مطابق لحجز مسجل: ', 'No matching booking: ', lang) + code.slice(0, 24), 'err');
+    lockedRef.current = true; stopCam(); playNotificationSound('cash');
+    try { const r = await confirmBooking(found, { checkInNow: true }); showAlert(r.msg, L('تفعيل QR ✅', 'QR Check-In ✅', lang)); onClose(); }
+    catch (e) { lockedRef.current = false; showAlert(e?.message || 'Error'); }
+  };
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      stopCam(); setCamErr('');
+      if (!navigator.mediaDevices?.getUserMedia) return setCamErr(L('المتصفح لا يدعم تشغيل الكاميرا هنا.', 'Camera unsupported in this browser.', lang));
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing } });
+        if (!alive) { stream.getTracks().forEach(t => t.stop()); return; }
+        streamRef.current = stream; const v = videoRef.current; if (!v) return; v.srcObject = stream; await v.play();
+        const tick = () => {
+          if (!alive || lockedRef.current) return;
+          const c = canvasRef.current;
+          if (v.readyState >= 2 && c && window.jsQR) {
+            c.width = v.videoWidth || 320; c.height = v.videoHeight || 240;
+            const ctx = c.getContext('2d'); ctx.drawImage(v, 0, 0, c.width, c.height);
+            const img = ctx.getImageData(0, 0, c.width, c.height), hit = window.jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+            if (hit?.data) { handleDecoded(hit.data); return; }
+          }
+          rafRef.current = requestAnimationFrame(tick);
+        };
+        rafRef.current = requestAnimationFrame(tick);
+      } catch { setCamErr(L('اسمح للمتصفح بإذن الكاميرا من أيقونة القفل 🔒 أو استخدم البحث اليدوي/رفع صورة.', 'Allow camera permission 🔒 or scan from image / code below.', lang)); }
+    })();
+    return () => { alive = false; stopCam(); };
+  }, [facing]);
+  const scanFromFile = (e) => {
+    const f = e.target.files?.[0]; e.target.value = ''; if (!f || !window.jsQR) return;
+    const rd = new FileReader(); rd.onload = ev => { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const ctx = c.getContext('2d'); ctx.drawImage(im, 0, 0); const d = ctx.getImageData(0, 0, c.width, c.height), hit = window.jsQR(d.data, d.width, d.height); if (hit?.data) handleDecoded(hit.data); else showAlert(L('لم يتم قراءة QR من الصورة.', 'Could not decode QR from image.', lang)); }; im.src = ev.target.result; }; rd.readAsDataURL(f);
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 text-xs"><div className="bg-neutral-900 border-2 border-purple-500 rounded-3xl p-5 max-w-sm w-full space-y-3 text-center">
+      <div className="flex justify-between items-center"><strong className="text-purple-300 text-sm">📷 {L('سكانر تفعيل الحجز عبر QR', 'QR Check-In Scanner', lang)}</strong><button onClick={() => { stopCam(); onClose(); }}>✕</button></div>
+      <div className="relative w-64 h-64 mx-auto rounded-2xl overflow-hidden bg-black border-2 border-dashed border-purple-500/50 flex items-center justify-center"><video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" /><canvas ref={canvasRef} className="hidden" /><div className="absolute inset-0 pointer-events-none border-2 border-amber-400/80 m-6 rounded-2xl animate-pulse" />{camErr && <p className="absolute inset-x-3 bg-black/90 p-2 rounded-xl text-[10px] text-rose-300 font-bold">{camErr}</p>}</div>
+      <div className="flex justify-center gap-2"><button type="button" onClick={() => setFacing(f => f === 'environment' ? 'user' : 'environment')} className="px-3 py-1.5 bg-neutral-800 text-cyan-300 rounded-xl font-bold text-[10px]">🔄 {L('قلب الكاميرا', 'Flip Cam', lang)}</button><label className="px-3 py-1.5 bg-neutral-800 text-amber-300 rounded-xl font-bold text-[10px] cursor-pointer">🖼️ {L('مسح من صورة', 'Scan Photo', lang)}<input type="file" accept="image/*" className="hidden" onChange={scanFromFile} /></label></div>
+      <form onSubmit={e => { e.preventDefault(); handleDecoded(manualCode); }} className="flex gap-1.5"><input value={manualCode} onChange={e => setManualCode(e.target.value)} placeholder={L('أو اكتب كود TX- يدوياً...', 'Or type TX- code...', lang)} className="flex-1 bg-neutral-950 border border-neutral-800 p-2 rounded-xl text-white font-mono uppercase" /><button className="px-3 bg-purple-600 text-white font-black rounded-xl">{L('تفعيل', 'Verify', lang)}</button></form>
+    </div></div>
+  );
+}
+function AdminQRPrintModal({ devices, config, onClose, lang }) {
+  const { toast } = useTwixUI(); const [cTitle, setCTitle] = useState(''); const [cSub, setCSub] = useState(''); const [cUrl, setCUrl] = useState('');
+  const customQRs = config.customQRs || [], base = window.location.origin + window.location.pathname;
+  const dlCard = async (qrTxt, title, sub, fname) => { const cv = await renderQRCardCanvas({ qrUrl: generateQRDataUrl(qrTxt), title, subtitle: sub, config }); const a = document.createElement('a'); a.download = fname + ".png"; a.href = cv.toDataURL(); a.click(); };
+  const addCustomQR = async (e) => {
+    e.preventDefault(); if (!cTitle.trim() || !cUrl.trim()) return;
+    const nxt = [...customQRs, { id: "cqr-" + Date.now(), title: cTitle.trim(), subtitle: cSub.trim() || 'TWIX VIP', url: cUrl.trim() }];
+    await db.collection('site_settings').doc('config').set({ customQRs: nxt }, { merge: true });
+    setCTitle(''); setCSub(''); setCUrl(''); toast('✓');
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 text-xs"><div className="bg-neutral-900 border border-cyan-500/50 rounded-3xl p-5 max-w-2xl w-full space-y-3 max-h-[90vh] overflow-y-auto no-scrollbar">
+      <div className="flex justify-between items-center border-b border-neutral-800 pb-2"><strong className="text-cyan-300 text-sm">📱 {L('كروت QR الصالة والمخصصة', 'Lounge & Custom QR Cards', lang)}</strong><button onClick={onClose}>✕</button></div>
+      <form onSubmit={addCustomQR} className="grid grid-cols-1 sm:grid-cols-4 gap-1.5 bg-neutral-950 p-2.5 rounded-2xl border border-neutral-800"><input required value={cTitle} onChange={e => setCTitle(e.target.value)} placeholder={L('عنوان الكود (مثلاً Wi-Fi / عرض)', 'QR Title...', lang)} className="bg-neutral-900 p-1.5 rounded-xl text-white" /><input value={cSub} onChange={e => setCSub(e.target.value)} placeholder={L('وصف قصير', 'Subtitle', lang)} className="bg-neutral-900 p-1.5 rounded-xl text-white" /><input required value={cUrl} onChange={e => setCUrl(e.target.value)} placeholder={L('الرابط أو النص أو رقم الصفحة', 'URL or Text', lang)} className="bg-neutral-900 p-1.5 rounded-xl text-cyan-300 font-mono" /><button className="py-1.5 bg-amber-500 text-black font-black rounded-xl">+ {L('إضافة QR', 'Add QR', lang)}</button></form>
+      <div id="printable-qr-sheet" className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 text-center space-y-1.5"><strong className="text-amber-400 block">{L('QR الصالة العام', 'General Lounge QR', lang)}</strong><QRImg text={base} size={125} /><button onClick={() => dlCard(base, config.loungeName, L('امسح للحجز والعروض 🎮', 'Scan to Book 🎮', lang), 'TWIX-General')} className="w-full py-1.5 bg-neutral-800 text-amber-300 rounded-xl font-bold">⬇️ PNG</button></div>
+        {[...devices].sort((a, b) => Number(a.sortOrder ?? 99) - Number(b.sortOrder ?? 99)).map(d => <div key={d.id} className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 text-center space-y-1.5"><strong className="text-white block truncate">{d.name}</strong><QRImg text={base + "?page=in_lounge&device=" + d.id} size={125} /><button onClick={() => dlCard(base + "?page=in_lounge&device=" + d.id, d.name, L('اطلب الكافتيريا لكرسيك 🍔', 'Order Snacks to Seat 🍔', lang), "TWIX-" + d.id)} className="w-full py-1.5 bg-neutral-800 text-cyan-300 rounded-xl font-bold">⬇️ PNG</button></div>)}
+        {customQRs.map(q => <div key={q.id} className="p-3 bg-neutral-950 rounded-2xl border border-purple-500/40 text-center space-y-1.5"><div className="flex justify-between items-center"><strong className="text-purple-300 truncate">{q.title}</strong><button onClick={() => db.collection('site_settings').doc('config').set({ customQRs: customQRs.filter(x => x.id !== q.id) }, { merge: true })} className="text-rose-400 font-bold">✕</button></div><QRImg text={q.url} size={125} /><button onClick={() => dlCard(q.url, q.title, q.subtitle, "TWIX-" + q.id)} className="w-full py-1.5 bg-neutral-800 text-purple-300 rounded-xl font-bold">⬇️ PNG</button></div>)}
+      </div>
+      <div className="flex gap-2 pt-2 border-t border-neutral-800"><button onClick={() => { document.body.classList.add('printing-qr'); window.print(); setTimeout(() => document.body.classList.remove('printing-qr'), 1500); }} className="flex-1 py-2.5 bg-cyan-500 text-black font-black rounded-xl">🖨️ {L('طباعة كامل الكروت / PDF', 'Print All QR / PDF', lang)}</button><button onClick={onClose} className="px-4 py-2.5 bg-neutral-800 text-white rounded-xl font-bold">{L('إغلاق', 'Close', lang)}</button></div>
+    </div></div>
+  );
+                                                                                     }
+    function AdminDossierModal({ cust, allBookings, todayStr, adminShift, config, adminSecret, updateCustomerPhoneAndMigrate, onViewMedia, onClose, lang }) {
+  const { showAlert, toast } = useTwixUI();
+  const [walOp, setWalOp] = useState('add'); const [walAmt, setWalAmt] = useState(''); const [walReason, setWalReason] = useState('');
+  const [hrsOp, setHrsOp] = useState('add'); const [hrsAmt, setHrsAmt] = useState(''); const [hrsDev, setHrsDev] = useState('PS5');
+  const [tDelta, setTDelta] = useState(5); const [tNote, setTNote] = useState(''); const [aiBusy, setAiBusy] = useState(false);
+  const custBks = allBookings.filter(b => b.phone === cust.phone), trust = computeTrustScore(cust, custBks);
+  const ps5H = Number(cust.prepaidPS5Hours ?? (cust.prepaidDeviceType === 'PS5' ? cust.prepaidHours : 0) ?? 0);
+  const ps4H = Number(cust.prepaidPS4Hours ?? (cust.prepaidDeviceType === 'PS4' ? cust.prepaidHours : 0) ?? 0);
+  const runAITrust = async () => {
+    if (!adminSecret) return showAlert('أدخل ADMIN_AI_SECRET أولاً!');
+    setAiBusy(true);
+    try {
+      const r = await fetch(AI_WORKER_URL + "/trust-score", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ adminSecret, customerStats: { attended: trust.attended, noShows: trust.noShows, late: trust.late, rejected: trust.rejected, emerg: trust.emerg, incidents: trust.inc, score: trust.score } }) });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d.score !== undefined) { await db.collection('customers').doc(cust.phone).set({ trustNote: d.note || '' }, { merge: true }); toast("🤖 " + d.score + "% — " + (d.label || '')); }
+      else showAlert(d?.error || 'تعذر التحليل');
+    } finally { setAiBusy(false); }
+  };
+  const saveDossier = async (e) => {
+    e.preventDefault(); const f = e.target, newPh = f.dPhone.value.trim(), newWa = f.dWa.value.trim(), pass = f.dPass.value.trim();
+    const wNum = Math.abs(Number(walAmt || 0)), walDelta = walOp === 'deduct' ? -wNum : wNum;
+    const hNum = Math.abs(Number(hrsAmt || 0)), hrsDelta = hrsOp === 'deduct' ? -hNum : hNum;
+    const upd = { name: f.dName.value.trim(), whatsappPhone: validateEgyptianPhone(newWa) ? newWa : (cust.whatsappPhone || newPh), favGame: f.dFavG.value.trim(), favDrink: f.dFavD.value.trim(), adminNotes: f.dAdminN.value.trim(), status: f.dStat.value, birthDate: f.dBirth.value, birthVerified: !!f.dBV.checked };
+    if (pass.length >= 4) { upd.password = await sha256Hex(pass); upd.passwordVersion = Date.now(); }
+    const notifs = [...(cust.notifications || [])];
+    if (walDelta !== 0) {
+      upd.walletBalance = Math.max(0, Number(cust.walletBalance || 0) + walDelta);
+      const rTxt = walReason.trim() || (walDelta > 0 ? 'إضافة رصيد من المدير' : 'خصم رصيد من المدير');
+      upd.walletHistory = [{ id: "tx-" + Date.now(), delta: walDelta, reason: rTxt, date: todayStr, time: getCairoTimeStr() }, ...(cust.walletHistory || [])].slice(0, 50);
+      notifs.unshift({ id: "nf-" + Date.now(), title: (walDelta > 0 ? "💰 تمت إضافة +" : "💸 تم خصم ") + Math.abs(walDelta) + "ج لمحفظتك", body: rTxt, read: false, date: todayStr, time: getCairoTimeStr() });
+    }
+    if (hrsDelta !== 0) {
+      const fH = hrsDev === 'PS5' ? 'prepaidPS5Hours' : 'prepaidPS4Hours', fE = hrsDev === 'PS5' ? 'prepaidPS5Exp' : 'prepaidPS4Exp';
+      const curH = hrsDev === 'PS5' ? ps5H : ps4H; upd[fH] = Math.max(0, Number((curH + hrsDelta).toFixed(2))); upd[fE] = cust[fE] || (Date.now() + 30 * 86400000);
+      notifs.unshift({ id: "nf-h-" + Date.now(), title: "⏳ تعديل ساعات باقة " + hrsDev + ": " + (hrsDelta > 0 ? "+" : "") + hrsDelta + "س", body: "بواسطة الإدارة", read: false, date: todayStr, time: getCairoTimeStr() });
+    }
+    if (upd.status !== cust.status) notifs.unshift({ id: "nf-s-" + Date.now(), title: "🔔 تحديث حالة حسابك: " + trStatus(upd.status, 'ar'), body: '', read: false, date: todayStr, time: getCairoTimeStr() });
+    upd.notifications = notifs.slice(0, 35);
+    try {
+      if (newPh && newPh !== cust.phone) await updateCustomerPhoneAndMigrate(cust.phone, newPh, upd);
+      else await db.collection('customers').doc(cust.phone).set(upd, { merge: true });
+      logSystemEvent(adminShift, 'EDIT_DOSSIER', cust.phone + (walDelta ? (" | مال:" + walDelta) : '') + (hrsDelta ? (" | ساعات:" + hrsDelta) : ''));
+      playNotificationSound('cash'); toast('✓ تم الحفظ وإشعار العميل!'); onClose();
+    } catch (err) { showAlert(err.message); }
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 text-xs"><div className="bg-neutral-900 border-2 border-amber-500/60 rounded-3xl p-5 max-w-lg w-full space-y-3 max-h-[92vh] overflow-y-auto no-scrollbar">
+      <div className="flex justify-between items-center border-b border-neutral-800 pb-2"><div><h3 className="font-black text-white text-base">📁 ملف العميل: {cust.name}</h3><span className="text-[10px] text-amber-400 font-mono">دعوة: {cust.myReferralCode || 'TX-VIP'} | تقييم الالتزام: {trust.score}% ({trust.label})</span></div><button onClick={onClose}>✕</button></div>
+      <div className="p-2.5 bg-neutral-950 rounded-2xl border border-neutral-800 grid grid-cols-4 gap-2 text-center text-[11px]"><div><span className="text-neutral-400 block text-[9px]">المحفظة</span><strong className="text-emerald-400 font-mono">{cust.walletBalance || 0}ج</strong></div><div><span className="text-neutral-400 block text-[9px]">PS5 شهرية</span><strong className="text-purple-300 font-mono">{ps5H}س</strong></div><div><span className="text-neutral-400 block text-[9px]">PS4 شهرية</span><strong className="text-cyan-300 font-mono">{ps4H}س</strong></div><div><span className="text-neutral-400 block text-[9px]">ساعاته الكلية</span><strong className="text-white font-mono">{Number(cust.hoursPlayed || 0).toFixed(1)}س</strong></div></div>
+      <div className="p-2.5 bg-neutral-950 rounded-2xl border border-cyan-500/30 space-y-1.5 text-[10px]"><div className="flex justify-between items-center"><strong className="text-cyan-300">📊 الالتزام الفعلي: حضر {trust.attended} • تأخير {trust.late} • غياب {trust.noShows} • رفض {trust.rejected} • مخالفات {trust.inc}</strong><button type="button" disabled={aiBusy} onClick={runAITrust} className="px-2 py-1 bg-cyan-500 text-black font-black rounded-lg">{aiBusy ? '⏳' : '🤖 AI'}</button></div><div className="flex gap-1"><input type="number" value={tDelta} onChange={e => setTDelta(Number(e.target.value))} className="w-14 bg-neutral-900 p-1 rounded text-center font-mono text-amber-300" /><input value={tNote} onChange={e => setTNote(e.target.value)} placeholder="سبب تعديل الالتزام (+/-)..." className="flex-1 bg-neutral-900 p-1 rounded text-white" /><button type="button" onClick={async () => { if (!tNote.trim()) return; await db.collection('customers').doc(cust.phone).set({ trustAdjustments: firebase.firestore.FieldValue.arrayUnion({ delta: tDelta, note: tNote.trim(), date: todayStr }) }, { merge: true }); setTNote(''); toast('✓'); }} className="px-2.5 bg-amber-500 text-black font-black rounded">تسجيل</button></div></div>
+      <form onSubmit={saveDossier} className="space-y-2.5">
+        <div className="grid grid-cols-3 gap-1.5"><input required name="dName" defaultValue={cust.name} placeholder="الاسم" className="bg-neutral-950 p-2 rounded-xl text-white font-bold" /><input required name="dPhone" defaultValue={cust.phone} placeholder="موبايل الاتصال" className="bg-neutral-950 p-2 rounded-xl text-cyan-300 font-mono" /><input name="dWa" defaultValue={cust.whatsappPhone || cust.phone} placeholder="واتساب" className="bg-neutral-950 p-2 rounded-xl text-emerald-300 font-mono" /></div>
+        <div className="grid grid-cols-2 gap-1.5"><input name="dPass" placeholder="باسورد جديد (اختياري)" className="bg-neutral-950 p-2 rounded-xl text-amber-400 font-mono" /><select name="dStat" defaultValue={cust.status || 'active'} className="bg-neutral-950 p-2 rounded-xl text-white"><option value="active">نشط 🟢</option><option value="pending_approval">معلق ⏳</option><option value="banned">محظور 🚫</option></select></div>
+        <div className="p-2.5 bg-neutral-950 rounded-2xl border border-emerald-500/30 space-y-1.5"><strong className="text-emerald-300 text-[10px] block">💰 الرصيد المالي (اضغط إضافة أو خصم):</strong><div className="flex gap-1.5"><button type="button" onClick={() => setWalOp('add')} className={"px-2.5 py-1.5 rounded-xl font-black " + (walOp === 'add' ? 'bg-emerald-500 text-black' : 'bg-neutral-900 text-neutral-400')}>+ إضافة</button><button type="button" onClick={() => setWalOp('deduct')} className={"px-2.5 py-1.5 rounded-xl font-black " + (walOp === 'deduct' ? 'bg-rose-600 text-white' : 'bg-neutral-900 text-neutral-400')}>- خصم</button><input type="number" min={0} value={walAmt} onChange={e => setWalAmt(e.target.value)} placeholder="المبلغ (ج)" className="w-24 bg-neutral-900 p-1.5 rounded-xl text-center font-mono text-white font-bold" /><input value={walReason} onChange={e => setWalReason(e.target.value)} placeholder="السبب..." className="flex-1 bg-neutral-900 p-1.5 rounded-xl text-white" /></div></div>
+        <div className="p-2.5 bg-neutral-950 rounded-2xl border border-purple-500/30 space-y-1.5"><strong className="text-purple-300 text-[10px] block">⏳ الساعات الشهرية (PS5 / PS4):</strong><div className="flex gap-1.5"><button type="button" onClick={() => setHrsOp('add')} className={"px-2.5 py-1.5 rounded-xl font-black " + (hrsOp === 'add' ? 'bg-purple-500 text-white' : 'bg-neutral-900 text-neutral-400')}>+ إضافة</button><button type="button" onClick={() => setHrsOp('deduct')} className={"px-2.5 py-1.5 rounded-xl font-black " + (hrsOp === 'deduct' ? 'bg-rose-600 text-white' : 'bg-neutral-900 text-neutral-400')}>- خصم</button><select value={hrsDev} onChange={e => setHrsDev(e.target.value)} className="bg-neutral-900 p-1.5 rounded-xl text-amber-300 font-bold"><option value="PS5">PS5</option><option value="PS4">PS4</option></select><input type="number" min={0} step="0.5" value={hrsAmt} onChange={e => setHrsAmt(e.target.value)} placeholder="ساعات" className="flex-1 bg-neutral-900 p-1.5 rounded-xl text-center font-mono text-white font-bold" /></div></div>
+        <div className="grid grid-cols-2 gap-1.5"><input name="dFavG" defaultValue={cust.favGame || ''} placeholder="اللعبة المفضلة" className="bg-neutral-950 p-2 rounded-xl text-white" /><input name="dFavD" defaultValue={cust.favDrink || ''} placeholder="المشروب المفضل" className="bg-neutral-950 p-2 rounded-xl text-white" /></div>
+        <div className="grid grid-cols-2 gap-2 items-center"><input name="dBirth" type="date" defaultValue={cust.birthDate || ''} className="bg-neutral-950 p-2 rounded-xl text-white font-mono text-[10px]" /><label className="text-[10px] flex items-center gap-1"><input type="checkbox" name="dBV" defaultChecked={!!cust.birthVerified} /> ميلاد موثق</label></div>
+        <textarea rows={2} name="dAdminN" defaultValue={cust.adminNotes || ''} placeholder="ملاحظات سرية للإدارة..." className="w-full bg-neutral-950 p-2 rounded-xl text-white" />
+        <button className="w-full py-2.5 bg-amber-500 text-black font-black rounded-xl">حفظ وإشعار العميل ✓</button>
+      </form>
+      <div className="flex gap-1.5">{(cust.idCardMediaId || cust.idCardImage) && <button onClick={() => onViewMedia(cust.idCardMediaId || cust.idCardImage)} className="flex-1 py-1.5 bg-neutral-950 border border-neutral-800 text-cyan-300 rounded-xl font-bold">🪪 معاينة البطاقة</button>}{cust.deviceFingerprintHW && <button onClick={async () => { await db.collection('site_settings').doc('config').set({ whitelistedDevices: firebase.firestore.FieldValue.arrayUnion(cust.deviceFingerprintHW) }, { merge: true }); toast('✓ استثناء الجهاز'); }} className="flex-1 py-1.5 bg-neutral-950 border border-neutral-800 text-emerald-300 rounded-xl font-bold">🔓 فك قيد الجهاز (2+)</button>}</div>
+    </div></div>
+  );
+                                                                                                                                                     }
+    function AdminArenaAndHallTab({ tournaments, matches, challenges, hallRecords, todayStr, settleMatchAndReward }) {
+  const { showAlert, showConfirm, showDoubleConfirm, toast } = useTwixUI();
+  const [trT, setTrT] = useState(''); const [trG, setTrG] = useState('EA FC 25'); const [trF, setTrF] = useState(50); const [trP, setTrP] = useState('500ج'); const [trM, setTrM] = useState(16);
+  const [addPPh, setAddPPh] = useState({}); const [hrTitle, setHrTitle] = useState(''); const [hrScore, setHrScore] = useState(''); const [hrHolder, setHrHolder] = useState('');
+  const [mA, setMA] = useState(''); const [mB, setMB] = useState(''); const [mT, setMT] = useState('9:00 م');
+  const createTournament = async (e) => {
+    e.preventDefault(); if (!trT.trim()) return;
+    const id = "tr-" + Date.now();
+    await db.collection('tournaments').doc(id).set({ id, title: trT.trim(), game: trG.trim(), entryFee: Number(trF || 0), prizeText: trP.trim(), maxPlayers: Math.max(2, Number(trM || 16)), approvedPlayers: [], pendingPlayers: [], bracketMatches: [], status: 'open', bracketNote: '', createdAt: new Date().toISOString() });
+    setTrT(''); playNotificationSound('cash'); toast('✓ تم إنشاء البطولة!');
+  };
+  const dropApprovedPlayer = async (t, p) => {
+    if (!(await showConfirm("إزالة اللاعب [" + p.name + "] (ناقص نفر) لفتح مكانه؟", '', true))) return;
+    await db.collection('tournaments').doc(t.id).update({ approvedPlayers: (t.approvedPlayers || []).filter(x => x.phone !== p.phone) });
+    if (p.phone) await pushCustomerMeta(p.phone, { notifTitle: "⚠️ تم تحديث قائمة بطولة " + t.title, notifBody: "تمت إزالتك لعدم الحضور أو التعديل." });
+    toast('✓ تم فتح مكان جديد!');
+  };
+  const manualAddPlayer = async (t) => {
+    const ph = (addPPh[t.id] || '').trim(); if (!validateEgyptianPhone(ph)) return showAlert('أدخل رقم عميل صحيح.');
+    if ((t.approvedPlayers || []).length >= Number(t.maxPlayers || 16)) return showAlert('البطولة مكتملة!');
+    const snap = await db.collection('customers').doc(ph).get(), nm = snap.exists ? snap.data().name : ph;
+    await db.collection('tournaments').doc(t.id).update({ approvedPlayers: firebase.firestore.FieldValue.arrayUnion({ phone: ph, name: nm }) });
+    setAddPPh(p => ({ ...p, [t.id]: '' })); toast("✓ أُضيف " + nm);
+  };
+  const genBracket = async (t) => {
+    const pls = [...(t.approvedPlayers || [])]; if (pls.length < 2) return showAlert('يجب وجود لاعبين على الأقل لتوليد القرعة!');
+    for (let i = pls.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pls[i], pls[j]] = [pls[j], pls[i]]; }
+    const pairs = []; for (let i = 0; i < pls.length; i += 2) pairs.push({ p1: pls[i].name, p2: pls[i + 1]?.name || 'تأهل مباشر (BYE)', winner: '' });
+    await db.collection('tournaments').doc(t.id).update({ bracketMatches: pairs, status: 'active' }); toast('🎲 تم توليد جدول المواجهات!');
+  };
+  const deleteTournamentSafe = async (t) => {
+    if (!(await showDoubleConfirm("حذف بطولة [" + t.title + "] ورد أي رسوم اشتراك لأصحابها؟"))) return;
+    const allP = [...(t.pendingPlayers || []), ...(t.approvedPlayers || [])];
+    for (const p of allP) { const f = Number(p.feePaid ?? t.entryFee ?? 0); if (f > 0 && p.phone) await pushCustomerMeta(p.phone, { walletDelta: f, reason: "رد رسوم إلغاء بطولة " + t.title, notifTitle: "💰 رد رسوم البطولة +" + f + "ج", notifBody: t.title }).then(() => db.collection('customers').doc(p.phone).update({ walletBalance: firebase.firestore.FieldValue.increment(f) })).catch(() => {}); }
+    await db.collection('tournaments').doc(t.id).delete(); toast('✓ تم الحذف ورد الرسوم!');
+  };
+  return (
+    <div className="space-y-4 text-xs">
+      <div className="bg-neutral-900 border border-purple-500/40 p-4 rounded-3xl space-y-3">
+        <strong className="text-purple-300 text-sm block">🏆 إنشاء وإدارة البطولات الرسمية:</strong>
+        <form onSubmit={createTournament} className="grid grid-cols-2 sm:grid-cols-6 gap-1.5 bg-neutral-950 p-2.5 rounded-2xl"><input required value={trT} onChange={e => setTrT(e.target.value)} placeholder="اسم البطولة" className="col-span-2 bg-neutral-900 p-1.5 rounded-xl text-white" /><input value={trG} onChange={e => setTrG(e.target.value)} placeholder="اللعبة" className="bg-neutral-900 p-1.5 rounded-xl text-white" /><input type="number" min={2} value={trM} onChange={e => setTrM(e.target.value)} title="أقصى عدد لاعبين" className="bg-neutral-900 p-1.5 rounded-xl text-cyan-300 font-mono text-center" /><input type="number" min={0} value={trF} onChange={e => setTrF(e.target.value)} placeholder="الاشتراك" className="bg-neutral-900 p-1.5 rounded-xl text-amber-400 font-mono text-center" /><input value={trP} onChange={e => setTrP(e.target.value)} placeholder="الجائزة" className="bg-neutral-900 p-1.5 rounded-xl text-emerald-400" /><button className="col-span-2 sm:col-span-6 py-1.5 bg-purple-600 text-white font-black rounded-xl">+ إنشاء البطولة</button></form>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">{tournaments.map(t => (
+          <div key={t.id} className="p-3.5 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-2">
+            <div className="flex justify-between items-center gap-1"><strong className="text-white">{t.title}</strong><div className="flex gap-1 items-center"><input type="number" min={2} defaultValue={t.maxPlayers || 16} onBlur={e => db.collection('tournaments').doc(t.id).update({ maxPlayers: Math.max(2, Number(e.target.value || 16)) })} className="w-12 bg-neutral-900 p-1 rounded text-center font-mono text-cyan-300 text-[10px]" title="العدد الأقصى" /><select value={t.status || 'open'} onChange={e => db.collection('tournaments').doc(t.id).update({ status: e.target.value })} className="bg-neutral-900 p-1 rounded text-[10px] text-purple-300"><option value="open">مفتوحة</option><option value="active">جارية</option><option value="closed">مغلقة</option></select><button onClick={() => deleteTournamentSafe(t)} className="text-rose-400 px-1">🗑️</button></div></div>
+            {(t.pendingPlayers || []).map(p => <div key={p.phone} className="p-1.5 bg-neutral-900 rounded-xl flex justify-between items-center text-[10px]"><span>⏳ {p.name} ({p.phone})</span><div className="flex gap-1"><button onClick={async () => { if ((t.approvedPlayers || []).length >= Number(t.maxPlayers || 16)) return showAlert('البطولة مكتملة!'); await db.collection('tournaments').doc(t.id).update({ approvedPlayers: firebase.firestore.FieldValue.arrayUnion({ name: p.name, phone: p.phone, feePaid: p.feePaid || 0 }), pendingPlayers: (t.pendingPlayers || []).filter(x => x.phone !== p.phone) }); await pushCustomerMeta(p.phone, { notifTitle: "🏆 تم قبولك في البطولة!", notifBody: t.title }); playNotificationSound('cash'); }} className="px-2 py-0.5 bg-emerald-500 text-black font-black rounded">✓</button><button onClick={async () => { if (Number(p.feePaid || 0) > 0) { await db.collection('customers').doc(p.phone).update({ walletBalance: firebase.firestore.FieldValue.increment(Number(p.feePaid)) }); await pushCustomerMeta(p.phone, { walletDelta: Number(p.feePaid), reason: "رفض اشتراك " + t.title, notifTitle: "❌ اعتذار بطولة " + t.title, notifBody: "تم رد " + p.feePaid + "ج" }); } await db.collection('tournaments').doc(t.id).update({ pendingPlayers: (t.pendingPlayers || []).filter(x => x.phone !== p.phone) }); }} className="px-2 py-0.5 bg-rose-600 text-white rounded">✕</button></div></div>)}
+            <div className="flex flex-wrap gap-1">{(t.approvedPlayers || []).map(p => <span key={p.phone} className="px-2 py-0.5 bg-neutral-900 border border-cyan-500/30 rounded-lg text-[10px] text-cyan-200 flex items-center gap-1">{p.name}<button onClick={() => dropApprovedPlayer(t, p)} className="text-rose-400 font-bold">✕</button></span>)}</div>
+            <div className="flex gap-1"><input value={addPPh[t.id] || ''} onChange={e => setAddPPh(p => ({ ...p, [t.id]: e.target.value }))} placeholder="+ رقم لاعب" className="flex-1 bg-neutral-900 p-1 rounded text-[10px] font-mono text-white" /><button onClick={() => manualAddPlayer(t)} className="px-2 bg-cyan-500 text-black font-black rounded text-[10px]">+ ضيف</button><button onClick={() => genBracket(t)} className="px-2 bg-amber-500 text-black font-black rounded text-[10px]">🎲 قرعة</button></div>
+            {(t.bracketMatches || []).map((bm, i) => <div key={i} className="p-1.5 bg-neutral-900 rounded-lg flex justify-between items-center text-[10px]"><span>{bm.p1} 🆚 {bm.p2}</span><div className="flex gap-1"><button onClick={() => { const nxt = [...t.bracketMatches]; nxt[i] = { ...bm, winner: bm.p1 }; db.collection('tournaments').doc(t.id).update({ bracketMatches: nxt }); }} className={"px-1.5 py-0.5 rounded " + (bm.winner === bm.p1 ? 'bg-emerald-500 text-black font-black' : 'bg-neutral-800')}>{bm.p1.split(' ')[0]}</button><button onClick={() => { const nxt = [...t.bracketMatches]; nxt[i] = { ...bm, winner: bm.p2 }; db.collection('tournaments').doc(t.id).update({ bracketMatches: nxt }); }} className={"px-1.5 py-0.5 rounded " + (bm.winner === bm.p2 ? 'bg-emerald-500 text-black font-black' : 'bg-neutral-800')}>{bm.p2.split(' ')[0]}</button></div></div>)}
+            <input defaultValue={t.winner || ''} onBlur={e => db.collection('tournaments').doc(t.id).update({ winner: e.target.value.trim() })} placeholder="اسم البطل النهائي..." className="w-full bg-neutral-900 p-1.5 rounded text-[10px] text-amber-300" />
+          </div>
+        ))}</div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-3xl space-y-2"><strong className="text-white block">⚽ الماتشات والتوقعات:</strong><form onSubmit={e => { e.preventDefault(); if (!mA.trim() || !mB.trim()) return; const id = "m-" + Date.now(); db.collection('matches').doc(id).set({ id, teamA: mA.trim(), teamB: mB.trim(), time: mT, status: 'open', scoreA: 0, scoreB: 0, predictions: {}, createdAt: new Date().toISOString() }); setMA(''); setMB(''); }} className="flex gap-1"><input value={mA} onChange={e => setMA(e.target.value)} placeholder="فريق 1" className="flex-1 bg-neutral-950 p-1.5 rounded text-white" /><input value={mB} onChange={e => setMB(e.target.value)} placeholder="فريق 2" className="flex-1 bg-neutral-950 p-1.5 rounded text-white" /><input value={mT} onChange={e => setMT(e.target.value)} className="w-16 bg-neutral-950 p-1.5 rounded text-amber-300" /><button className="px-2.5 bg-emerald-500 text-black font-black rounded">+</button></form>{matches.map(m => <div key={m.id} className="p-2 bg-neutral-950 rounded-xl flex justify-between items-center"><span>{m.teamA} - {m.teamB} ({m.scoreA}:{m.scoreB})</span>{m.status === 'open' ? <div className="flex gap-1"><button onClick={() => db.collection('matches').doc(m.id).update({ scoreA: (m.scoreA || 0) + 1 })} className="px-1.5 bg-neutral-800 rounded">+A</button><button onClick={() => db.collection('matches').doc(m.id).update({ scoreB: (m.scoreB || 0) + 1 })} className="px-1.5 bg-neutral-800 rounded">+B</button><button onClick={async () => { const w = await settleMatchAndReward(m, m.scoreA || 0, m.scoreB || 0); toast("تم اعتماد النتيجة (" + w + " فائز)"); }} className="px-2 bg-emerald-500 text-black font-black rounded">اعتماد</button></div> : <button onClick={() => db.collection('matches').doc(m.id).delete()} className="text-rose-400">✕</button>}</div>)}</div>
+        <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-3xl space-y-2"><strong className="text-white block">🌟 لوحة الأرقام القياسية + الزعيم:</strong><form onSubmit={e => { e.preventDefault(); if (!hrTitle.trim()) return; const id = "hf-" + Date.now(); db.collection('hall_of_fame').doc(id).set({ id, title: hrTitle.trim(), score: hrScore.trim(), holder: hrHolder.trim(), date: todayStr }); setHrTitle(''); setHrScore(''); setHrHolder(''); toast('✓'); }} className="grid grid-cols-3 gap-1"><input value={hrTitle} onChange={e => setHrTitle(e.target.value)} placeholder="اللقب" className="bg-neutral-950 p-1.5 rounded text-white" /><input value={hrScore} onChange={e => setHrScore(e.target.value)} placeholder="الرقم" className="bg-neutral-950 p-1.5 rounded text-amber-400" /><div className="flex gap-1"><input value={hrHolder} onChange={e => setHrHolder(e.target.value)} placeholder="البطل" className="flex-1 bg-neutral-950 p-1.5 rounded text-white" /><button className="px-2 bg-amber-500 text-black font-black rounded">+</button></div></form>{hallRecords.map(r => <div key={r.id} className="p-1.5 bg-neutral-950 rounded-xl flex justify-between"><span>🏆 {r.title}: {r.score} ({r.holder})</span><button onClick={() => db.collection('hall_of_fame').doc(r.id).delete()} className="text-rose-400">✕</button></div>)}{challenges.map(c => <div key={c.id} className="p-1.5 bg-neutral-950 rounded-xl flex justify-between"><span>{c.isBoss ? '👑 ' : ''}{c.playerName} ({c.score || 0})</span><div className="flex gap-1"><button onClick={() => db.collection('challenges').doc(c.id).update({ score: (c.score || 0) + 1 })} className="px-1.5 bg-emerald-500 text-black rounded">+1</button><button onClick={async () => { for (const x of challenges) if (x.id !== c.id && x.isBoss) await db.collection('challenges').doc(x.id).update({ isBoss: false }); await db.collection('challenges').doc(c.id).update({ isBoss: !c.isBoss }); }} className="px-1.5 bg-amber-500 text-black rounded">زعيم</button><button onClick={() => db.collection('challenges').doc(c.id).delete()} className="text-rose-400">✕</button></div></div>)}</div>
+      </div>
+    </div>
+  );
+    }
+    function AdminOffersAndCouponsPanel({ offers, coupons }) {
+  const { showConfirm, toast } = useTwixUI();
+  const [cpCode, setCpCode] = useState(''); const [cpPh, setCpPh] = useState(''); const [cpFix, setCpFix] = useState(''); const [cpPct, setCpPct] = useState(''); const [cpDays, setCpDays] = useState(7);
+  return (
+    <div className="space-y-4 text-xs">
+      <div className="p-4 bg-neutral-950 rounded-2xl border border-pink-500/30 space-y-2">
+        <strong className="text-pink-300 block">📢 إدارة العروض الحصرية ({offers.length}):</strong>
+        {offers.length === 0 ? <p className="text-neutral-500">لا توجد عروض منشورة.</p> : offers.map(o => (
+          <div key={o.id} className="p-2.5 bg-neutral-900 rounded-xl border border-neutral-800 space-y-1.5">
+            <div className="flex flex-wrap justify-between items-center gap-2"><strong className="text-white">{o.title}</strong><div className="flex gap-1"><button onClick={() => db.collection('offers').doc(o.id).update({ active: o.active === false })} className={"px-2 py-0.5 rounded font-bold text-[10px] " + (o.active === false ? 'bg-neutral-800 text-neutral-400' : 'bg-emerald-500/20 text-emerald-300')}>{o.active === false ? 'مخفي' : 'شغال'}</button><button onClick={() => db.collection('offers').doc(o.id).update({ expiresAt: Date.now() + 86400000 })} className="px-2 py-0.5 bg-cyan-500/20 text-cyan-300 rounded text-[10px]">+24س</button><button onClick={async () => { if (await showConfirm('حذف العرض نهائياً؟', '', true)) db.collection('offers').doc(o.id).delete(); }} className="px-2 py-0.5 bg-rose-600 text-white rounded text-[10px]">🗑️</button></div></div>
+            <div className="grid grid-cols-3 gap-1.5 text-[10px]"><div><span>السعر:</span><input type="number" defaultValue={o.price} onBlur={e => db.collection('offers').doc(o.id).update({ price: Number(e.target.value || 0) })} className="w-full bg-neutral-950 p-1 rounded text-amber-400 font-mono" /></div><div><span>قبل الخصم:</span><input type="number" defaultValue={o.oldPrice || 0} onBlur={e => db.collection('offers').doc(o.id).update({ oldPrice: Number(e.target.value || 0) })} className="w-full bg-neutral-950 p-1 rounded text-neutral-400 font-mono" /></div><div><span>المدة (د):</span><input type="number" defaultValue={o.duration || 60} onBlur={e => db.collection('offers').doc(o.id).update({ duration: Number(e.target.value || 60) })} className="w-full bg-neutral-950 p-1 rounded text-cyan-300 font-mono" /></div></div>
+          </div>
+        ))}
+      </div>
+      <div className="p-4 bg-neutral-950 rounded-2xl border border-cyan-500/30 space-y-2">
+        <strong className="text-cyan-300 block">🎟️ إصدار وسجل الكوبونات ({coupons.length}):</strong>
+        <form onSubmit={e => { e.preventDefault(); const cd = cpCode.trim().toUpperCase(); if (!cd) return; db.collection('coupons').doc(cd).set({ id: cd, code: cd, targetPhone: cpPh.trim(), fixedAmount: Number(cpFix || 0), percent: Number(cpPct || 0), active: true, usedBy: [], expiresAt: Date.now() + Number(cpDays || 7) * 86400000 }); setCpCode(''); setCpPh(''); setCpFix(''); setCpPct(''); toast('✓'); }} className="grid grid-cols-2 sm:grid-cols-6 gap-1.5">
+          <input required value={cpCode} onChange={e => setCpCode(e.target.value)} placeholder="كود الكوبون" className="bg-neutral-900 p-1.5 rounded text-amber-300 font-mono uppercase" /><input value={cpPh} onChange={e => setCpPh(e.target.value)} placeholder="رقم عميل (اختياري)" className="bg-neutral-900 p-1.5 rounded text-white font-mono" /><input type="number" value={cpFix} onChange={e => setCpFix(e.target.value)} placeholder="مبلغ ج" className="bg-neutral-900 p-1.5 rounded text-emerald-400 font-mono text-center" /><input type="number" value={cpPct} onChange={e => setCpPct(e.target.value)} placeholder="نسبة %" className="bg-neutral-900 p-1.5 rounded text-cyan-300 font-mono text-center" /><input type="number" value={cpDays} onChange={e => setCpDays(e.target.value)} placeholder="أيام" className="bg-neutral-900 p-1.5 rounded text-white font-mono text-center" /><button className="py-1.5 bg-cyan-500 text-black font-black rounded">+ إصدار</button>
+        </form>
+        <div className="space-y-1 max-h-44 overflow-y-auto no-scrollbar">{coupons.map(cp => <div key={cp.id} className="p-2 bg-neutral-900 rounded-xl flex flex-wrap justify-between items-center gap-1 text-[10px]"><div><strong className="font-mono text-amber-400">{cp.code}</strong> ({cp.fixedAmount ? (cp.fixedAmount + "ج") : (cp.percent + "%")}) {cp.targetPhone ? ("→ " + cp.targetPhone) : 'عام'} | استخدمه: {(cp.usedBy || []).length}</div><div className="flex gap-1"><button onClick={() => db.collection('coupons').doc(cp.id).update({ active: cp.active === false })} className={"px-2 py-0.5 rounded font-bold " + (cp.active === false ? 'bg-rose-900 text-rose-200' : 'bg-emerald-500/20 text-emerald-300')}>{cp.active === false ? 'ملغي' : 'فعّال'}</button><button onClick={() => db.collection('coupons').doc(cp.id).delete()} className="px-2 py-0.5 bg-rose-600 text-white rounded">🗑️</button></div></div>)}</div>
+      </div>
+    </div>
+  );
+}
+function AdminPacksBundlesWheelPanel({ monthlyPacks, bundles, wheelSegments, missions, config }) {
+  const { toast } = useTwixUI();
+  const [npName, setNpName] = useState(''); const [npDev, setNpDev] = useState('PS5'); const [npH, setNpH] = useState(5); const [npP, setNpP] = useState(400); const [npD, setNpD] = useState(30); const [npDesc, setNpDesc] = useState('');
+  const [nbName, setNbName] = useState(''); const [nbH, setNbH] = useState(2); const [nbMode, setNbMode] = useState('single'); const [nbPct, setNbPct] = useState(10); const [nbCond, setNbCond] = useState('');
+  const savePacks = (list) => { db.collection('site_settings').doc('monthly_packs').set({ list }); toast('✓'); };
+  const saveBundles = (list) => { db.collection('site_settings').doc('bundles').set({ list }); toast('✓'); };
+  return (
+    <div className="space-y-4 text-xs">
+      <div className="p-4 bg-neutral-950 rounded-2xl border border-purple-500/30 space-y-2">
+        <strong className="text-purple-300 block">⏳ باقات الساعات الشهرية (إضافة / تعديل / حذف):</strong>
+        <form onSubmit={e => { e.preventDefault(); if (!npName.trim()) return; savePacks([...monthlyPacks, { id: "mp-" + Date.now(), name: npName.trim(), deviceType: npDev, hours: Number(npH), price: Number(npP), validDays: Number(npD), desc: npDesc.trim(), active: true }]); setNpName(''); setNpDesc(''); }} className="grid grid-cols-2 sm:grid-cols-6 gap-1.5">
+          <input required value={npName} onChange={e => setNpName(e.target.value)} placeholder="اسم الباقة" className="col-span-2 bg-neutral-900 p-1.5 rounded text-white" /><select value={npDev} onChange={e => setNpDev(e.target.value)} className="bg-neutral-900 p-1.5 rounded text-white"><option value="PS5">PS5</option><option value="PS4">PS4</option></select><input type="number" value={npH} onChange={e => setNpH(e.target.value)} placeholder="ساعات" className="bg-neutral-900 p-1.5 rounded text-cyan-300 font-mono text-center" /><input type="number" value={npP} onChange={e => setNpP(e.target.value)} placeholder="السعر" className="bg-neutral-900 p-1.5 rounded text-amber-400 font-mono text-center" /><input value={npDesc} onChange={e => setNpDesc(e.target.value)} placeholder="الوصف" className="bg-neutral-900 p-1.5 rounded text-white" /><button className="col-span-2 sm:col-span-6 py-1.5 bg-purple-600 text-white font-black rounded">+ إضافة باقة شهرية</button>
+        </form>
+        {monthlyPacks.map(mp => <div key={mp.id} className="p-2 bg-neutral-900 rounded-xl grid grid-cols-2 sm:grid-cols-6 gap-1 items-center text-[10px]"><input defaultValue={mp.name} onBlur={e => savePacks(monthlyPacks.map(x => x.id === mp.id ? { ...x, name: e.target.value } : x))} className="col-span-2 bg-neutral-950 p-1 rounded text-white" /><input type="number" defaultValue={mp.hours} onBlur={e => savePacks(monthlyPacks.map(x => x.id === mp.id ? { ...x, hours: Number(e.target.value) } : x))} className="bg-neutral-950 p-1 rounded text-cyan-300 font-mono text-center" /><input type="number" defaultValue={mp.price} onBlur={e => savePacks(monthlyPacks.map(x => x.id === mp.id ? { ...x, price: Number(e.target.value) } : x))} className="bg-neutral-950 p-1 rounded text-amber-400 font-mono text-center" /><button onClick={() => savePacks(monthlyPacks.map(x => x.id === mp.id ? { ...x, active: x.active === false } : x))} className="p-1 bg-neutral-800 rounded">{mp.active === false ? 'مخفي' : 'ظاهر'}</button><button onClick={() => savePacks(monthlyPacks.filter(x => x.id !== mp.id))} className="p-1 bg-rose-600 text-white rounded">🗑️</button></div>)}
+      </div>
+      <div className="p-4 bg-neutral-950 rounded-2xl border border-amber-500/30 space-y-2">
+        <strong className="text-amber-300 block">🎁 الباقات التوفيرية (إضافة / تعديل / حذف):</strong>
+        <form onSubmit={e => { e.preventDefault(); if (!nbName.trim()) return; saveBundles([...bundles, { id: "b-" + Date.now(), name: nbName.trim(), hours: Number(nbH), mode: nbMode, discountPercent: Number(nbPct), cafeteriaCondition: nbCond.trim(), desc: nbName.trim(), active: true }]); setNbName(''); setNbCond(''); }} className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+          <input required value={nbName} onChange={e => setNbName(e.target.value)} placeholder="اسم الباقة" className="bg-neutral-900 p-1.5 rounded text-white" /><input type="number" value={nbH} onChange={e => setNbH(e.target.value)} placeholder="ساعات" className="bg-neutral-900 p-1.5 rounded font-mono text-center" /><select value={nbMode} onChange={e => setNbMode(e.target.value)} className="bg-neutral-900 p-1.5 rounded text-white"><option value="single">فردي</option><option value="multi">ملتي</option></select><input type="number" value={nbPct} onChange={e => setNbPct(e.target.value)} placeholder="خصم %" className="bg-neutral-900 p-1.5 rounded text-amber-400 font-mono text-center" /><input value={nbCond} onChange={e => setNbCond(e.target.value)} placeholder="شرط الكافتيريا" className="bg-neutral-900 p-1.5 rounded text-white" /><button className="col-span-2 sm:col-span-5 py-1.5 bg-amber-500 text-black font-black rounded">+ إضافة باقة توفير</button>
+        </form>
+        {bundles.map(b => <div key={b.id} className="p-2 bg-neutral-900 rounded-xl grid grid-cols-5 gap-1 items-center text-[10px]"><input defaultValue={b.name} onBlur={e => saveBundles(bundles.map(x => x.id === b.id ? { ...x, name: e.target.value } : x))} className="col-span-2 bg-neutral-950 p-1 rounded text-white" /><input type="number" defaultValue={b.discountPercent} onBlur={e => saveBundles(bundles.map(x => x.id === b.id ? { ...x, discountPercent: Number(e.target.value) } : x))} className="bg-neutral-950 p-1 rounded text-amber-400 font-mono text-center" /><button onClick={() => saveBundles(bundles.map(x => x.id === b.id ? { ...x, active: x.active === false } : x))} className="p-1 bg-neutral-800 rounded">{b.active === false ? 'مخفي' : 'ظاهر'}</button><button onClick={() => saveBundles(bundles.filter(x => x.id !== b.id))} className="p-1 bg-rose-600 text-white rounded">🗑️</button></div>)}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-1.5"><strong className="text-white block">🎡 عجلة الحظ (النسب %):</strong>{wheelSegments.map(w => <div key={w.id} className="flex gap-1 text-[10px]"><input defaultValue={w.label} onBlur={e => db.collection('site_settings').doc('wheel').set({ segments: wheelSegments.map(x => x.id === w.id ? { ...x, label: e.target.value } : x) })} className="flex-1 bg-neutral-900 p-1 rounded text-white" /><input type="number" defaultValue={w.prob} onBlur={e => db.collection('site_settings').doc('wheel').set({ segments: wheelSegments.map(x => x.id === w.id ? { ...x, prob: Number(e.target.value) } : x) })} className="w-12 bg-neutral-900 p-1 rounded text-amber-400 font-mono text-center" /><input type="number" defaultValue={w.rewardVal} onBlur={e => db.collection('site_settings').doc('wheel').set({ segments: wheelSegments.map(x => x.id === w.id ? { ...x, rewardVal: Number(e.target.value) } : x) })} className="w-12 bg-neutral-900 p-1 rounded text-emerald-400 font-mono text-center" /></div>)}</div>
+        <div className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-1.5"><strong className="text-white block">🎯 الإنجازات اللانهائية (1←∞):</strong>{missions.map(m => <div key={m.id} className="flex gap-1 text-[10px]"><input defaultValue={m.title} onBlur={e => db.collection('site_settings').doc('missions').set({ list: missions.map(x => x.id === m.id ? { ...x, title: e.target.value } : x) })} className="flex-1 bg-neutral-900 p-1 rounded text-white" /><input type="number" defaultValue={m.giftAmount ?? 3} onBlur={e => db.collection('site_settings').doc('missions').set({ list: missions.map(x => x.id === m.id ? { ...x, giftAmount: Number(e.target.value) } : x) })} className="w-12 bg-neutral-900 p-1 rounded text-emerald-400 font-mono text-center" title="المكافأة" /><button onClick={() => db.collection('site_settings').doc('missions').set({ list: missions.map(x => x.id === m.id ? { ...x, active: x.active === false } : x) })} className="px-2 bg-neutral-800 rounded">{m.active === false ? 'معطل' : 'فعّال'}</button></div>)}</div>
+      </div>
+    </div>
+  );
+            }
+    
