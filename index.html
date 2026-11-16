@@ -1208,4 +1208,380 @@ function SquadBillAndRaffle({ hubTab, squadData, saveSquad, snacksMenu, lastWinn
     </div>
   );
                                                                               }
+    function SquadMembersModal({ activeCode, squadData, saveSquad, myKey, myName, myRole, onClose, onDeleteSquad, lang }) {
+  const { showAlert, showConfirm, showDoubleConfirm, toast } = useTwixUI();
+  const [addPh, setAddPh] = useState(''); const [gName, setGName] = useState(squadData.squadName || activeCode);
+  const [newPin, setNewPin] = useState(squadData.pin || ''); const [busy, setBusy] = useState(false);
+  const members = (squadData.members || []).map((m, i) => typeof m === 'string' ? { key: m, name: m, role: i === 0 ? 'owner' : 'member' } : m);
+  const isOwner = myRole === 'owner', isAdmin = myRole === 'owner' || myRole === 'admin';
+  const canEditInfo = isOwner || (isAdmin && !squadData.adminOnlyInfo);
+  const addMember = async (e) => {
+    e.preventDefault(); const ph = addPh.trim(); if (!validateEgyptianPhone(ph)) return showAlert(L('أدخل رقم هاتف مصري صحيح!', 'Enter valid Egyptian phone!', lang));
+    if (members.some(m => m.key === ph || m.phone === ph)) return showAlert(L('العضو موجود بالفعل.', 'Already a member.', lang));
+    setBusy(true);
+    try {
+      const snap = await db.collection('customers').doc(ph).get();
+      if (!snap.exists) return showAlert(L('هذا الرقم غير مسجل في الصالة بعد.', 'Phone not registered yet.', lang));
+      const c = snap.data(), nxt = [...members, { key: ph, phone: ph, name: c.name, role: 'member', joinedAt: getCairoDateStr() }];
+      await saveSquad({ members: nxt, bannedKeys: (squadData.bannedKeys || []).filter(k => k !== ph) });
+      await pushCustomerMeta(ph, { notifTitle: L("👥 تمت إضافتك لشلة " + (squadData.squadName || activeCode), "👥 Added to Squad " + (squadData.squadName || activeCode), lang), notifBody: L("كود الشلة: ", "Code: ", lang) + activeCode });
+      setAddPh(''); toast(L('تمت الإضافة!', 'Added!', lang));
+    } finally { setBusy(false); }
+  };
+  const setRole = (k, role) => saveSquad({ members: members.map(m => m.key === k ? { ...m, role } : m) });
+  const transferOwner = async (target) => {
+    if (!(await showDoubleConfirm(L("نقل ملكية المؤسس إلى " + target.name + "؟", "Transfer ownership to " + target.name + "?", lang)))) return;
+    await saveSquad({ ownerKey: target.key, members: members.map(m => m.key === target.key ? { ...m, role: 'owner' } : (m.key === myKey ? { ...m, role: 'admin' } : m)) });
+    toast(L('تم نقل الملكية!', 'Ownership transferred!', lang));
+  };
+  const kickBan = async (m) => {
+    if (m.role === 'owner' || (!isOwner && m.role === 'admin')) return showAlert(L('لا تملك صلاحية طرد هذا العضو!', 'Cannot kick this member!', lang));
+    if (!(await showConfirm(L("طرد وحظر " + m.name + " من الشلة؟", "Kick & ban " + m.name + "?", lang), '', true))) return;
+    await saveSquad({ members: members.filter(x => x.key !== m.key), bannedKeys: [...new Set([...(squadData.bannedKeys || []), m.key])] });
+    toast(L('تم الطرد والحظر من الشلة.', 'Kicked & banned.', lang));
+  };
+  const handleReq = async (req, approve) => {
+    const rest = (squadData.pendingRequests || []).filter(r => r.key !== req.key);
+    if (!approve) return saveSquad({ pendingRequests: rest });
+    await saveSquad({ pendingRequests: rest, members: [...members, { key: req.key, phone: req.phone || '', name: req.name, role: 'member' }] });
+    if (req.phone) pushCustomerMeta(req.phone, { notifTitle: L("✅ تم قبولك في شلة " + (squadData.squadName || activeCode), "✅ Approved in Squad " + activeCode, lang) });
+  };
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 text-xs">
+      <div className="bg-neutral-900 border-2 border-amber-500/50 rounded-3xl p-5 max-w-md w-full space-y-3 max-h-[90vh] overflow-y-auto no-scrollbar">
+        <div className="flex justify-between items-center border-b border-neutral-800 pb-2"><strong className="text-amber-400 text-sm">👥 {L('أعضاء وإدارة الشلة', 'Squad Members & Roles', lang)}</strong><button onClick={onClose}>✕</button></div>
+        {canEditInfo && <div className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-2"><div className="flex items-center gap-3">{squadData.squadPhoto ? <img src={squadData.squadPhoto} className="w-12 h-12 rounded-2xl object-cover border border-amber-500/50" /> : <div className="w-12 h-12 rounded-2xl bg-amber-500/20 flex items-center justify-center text-xl">👥</div>}<div className="flex-1 space-y-1"><input value={gName} onChange={e => setGName(e.target.value)} placeholder={L('اسم الشلة', 'Squad Name', lang)} className="w-full bg-neutral-900 p-1.5 rounded-xl text-white font-bold" /><FilePickerButton onPick={b => saveSquad({ squadPhoto: b })} label={L('🖼️ تغيير صورة الشلة', '🖼️ Change Photo', lang)} className="text-[10px] text-amber-300 underline" /></div></div><button onClick={() => { saveSquad({ squadName: gName.trim() || activeCode }); toast('✓'); }} className="w-full py-1.5 bg-amber-500 text-black font-black rounded-xl text-[10px]">{L('حفظ الاسم', 'Save Name', lang)}</button></div>}
+        {isOwner && <div className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-2 text-[11px]"><strong className="text-cyan-300 block">🛡️ {L('صلاحيات المؤسس والأمان:', 'Owner Controls:', lang)}</strong><div className="flex gap-1.5"><input value={newPin} onChange={e => setNewPin(e.target.value)} placeholder={L('PIN سري للشلة (أو فارغ)', 'Secret PIN (or empty)', lang)} className="flex-1 bg-neutral-900 p-1.5 rounded-xl font-mono text-amber-300" /><button onClick={() => { saveSquad({ pin: newPin.trim() }); toast('🔒'); }} className="px-3 bg-neutral-800 text-white rounded-xl font-bold">{L('حفظ PIN', 'Save PIN', lang)}</button></div><label className="flex items-center gap-2"><input type="checkbox" checked={!!squadData.adminOnlyChat} onChange={e => saveSquad({ adminOnlyChat: e.target.checked })} /> {L('المشرفون فقط يرسلون رسائل', 'Admins-only chat')}</label><label className="flex items-center gap-2"><input type="checkbox" checked={!!squadData.adminOnlyInfo} onChange={e => saveSquad({ adminOnlyInfo: e.target.checked })} /> {L('المؤسس فقط يغيّر الاسم والصورة', 'Owner-only group info')}</label><label className="flex items-center gap-2"><input type="checkbox" checked={!!squadData.requireApproval} onChange={e => saveSquad({ requireApproval: e.target.checked })} /> {L('موافقة المشرفين لدخول عضو جديد', 'Admin approval to join')}</label><label className="flex items-center gap-2"><input type="checkbox" checked={!!squadData.protectContent} onChange={e => saveSquad({ protectContent: e.target.checked })} /> {L('حماية المحتوى ومنع الحفظ', 'Protect media from saving')}</label><div className="grid grid-cols-2 gap-1.5"><select value={squadData.slowModeSec || 0} onChange={e => saveSquad({ slowModeSec: Number(e.target.value) })} className="bg-neutral-900 p-1.5 rounded-xl text-amber-300"><option value={0}>{L('الوضع البطيء: متوقف', 'Slow Mode: Off', lang)}</option><option value={10}>{L('رسالة كل 10ث', '10s Slow Mode', lang)}</option><option value={30}>{L('رسالة كل 30ث', '30s Slow Mode', lang)}</option></select><select value={squadData.disappearHours || 0} onChange={e => saveSquad({ disappearHours: Number(e.target.value) })} className="bg-neutral-900 p-1.5 rounded-xl text-purple-300"><option value={0}>{L('اختفاء الرسائل: لا', 'Disappearing: Off', lang)}</option><option value={24}>{L('اختفاء بعد 24س', '24h Auto-Delete', lang)}</option><option value={168}>{L('اختفاء بعد 7 أيام', '7d Auto-Delete', lang)}</option></select></div></div>}
+        {isAdmin && <form onSubmit={addMember} className="flex gap-1.5"><input value={addPh} onChange={e => setAddPh(e.target.value)} placeholder={L('إضافة عضو برقم الموبايل...', 'Add phone 01xxxxxxxxx...', lang)} className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-2.5 py-1.5 text-white font-mono" /><button disabled={busy} className="px-3 bg-emerald-500 text-black font-black rounded-xl">{L('+ إضافة', '+ Add', lang)}</button></form>}
+        {isAdmin && (squadData.pendingRequests || []).length > 0 && <div className="p-2.5 bg-amber-500/10 border border-amber-500/40 rounded-2xl space-y-1"><strong className="text-amber-300 block text-[10px]">⏳ {L('طلبات انضمام معلقة:', 'Join Requests:', lang)}</strong>{squadData.pendingRequests.map(r => <div key={r.key} className="flex justify-between items-center"><span>{r.name}</span><div className="flex gap-1"><button onClick={() => handleReq(r, true)} className="px-2 py-0.5 bg-emerald-500 text-black rounded font-black">✓</button><button onClick={() => handleReq(r, false)} className="px-2 py-0.5 bg-rose-600 text-white rounded">✕</button></div></div>)}</div>}
+        <div className="space-y-1.5 max-h-52 overflow-y-auto no-scrollbar">{members.map(m => { const isOn = squadData.onlineMap?.[m.key] && (Date.now() - Number(squadData.onlineMap[m.key])) < 60000, isMuted = (squadData.mutedKeys || []).includes(m.key); return (<div key={m.key} className="p-2.5 bg-neutral-950 rounded-xl border border-neutral-800 flex flex-wrap justify-between items-center gap-1.5"><div><strong className="text-white">{m.name} {m.key === myKey ? L('(أنت)', '(You)', lang) : ''}</strong><span className={"mr-1.5 px-1.5 py-0.2 rounded text-[9px] font-black " + (m.role === 'owner' ? 'bg-amber-500 text-black' : (m.role === 'admin' ? 'bg-purple-600 text-white' : 'bg-neutral-800 text-neutral-300'))}>{m.role === 'owner' ? L('👑 المؤسس', '👑 Owner', lang) : (m.role === 'admin' ? L('🛡️ مشرف', '🛡️ Admin', lang) : L('👤 عضو', '👤 Member', lang))}</span>{isOn && <span className="text-[9px] text-emerald-400">🟢</span>}{isMuted && <span className="text-[9px] text-rose-400"> 🔇</span>}</div><div className="flex gap-1 text-[10px]">{isOwner && m.key !== myKey && <><button onClick={() => setRole(m.key, m.role === 'admin' ? 'member' : 'admin')} className="px-2 py-0.5 bg-neutral-800 text-purple-300 rounded">{m.role === 'admin' ? L('إزالة إشراف', 'Demote', lang) : L('ترقية مشرف', 'Make Admin', lang)}</button><button onClick={() => transferOwner(m)} className="px-2 py-0.5 bg-neutral-800 text-amber-300 rounded">👑</button></>}{isAdmin && m.key !== myKey && m.role === 'member' && <button onClick={() => saveSquad({ mutedKeys: isMuted ? (squadData.mutedKeys || []).filter(k => k !== m.key) : [...(squadData.mutedKeys || []), m.key] })} className="px-2 py-0.5 bg-neutral-800 text-cyan-300 rounded">{isMuted ? '🔊' : '🔇'}</button>}{(isOwner || (isAdmin && m.role === 'member')) && m.key !== myKey && <button onClick={() => kickBan(m)} className="px-2 py-0.5 bg-rose-600/30 text-rose-300 rounded font-bold">{L('طرد', 'Kick', lang)}</button>}</div></div>); })}</div>
+        {isOwner && <button onClick={onDeleteSquad} className="w-full py-2 bg-rose-600/20 border border-rose-500/40 text-rose-300 font-black rounded-xl">🗑️ {L('حذف الشلة نهائياً للجميع', 'Delete Squad Forever', lang)}</button>}
+      </div>
+    </div>
+  );
+    }
+    function SquadCallRoom({ activeCode, squadData, myKey, myName, myRole, groupMuted, turnConfig, lang }) {
+  const { showAlert, toast } = useTwixUI();
+  const [callState, setCallState] = useState(null); const [joined, setJoined] = useState(false); const [permModal, setPermModal] = useState(null);
+  const [muted, setMuted] = useState(false); const [camOff, setCamOff] = useState(false); const [facing, setFacing] = useState('user');
+  const [sharing, setSharing] = useState(false); const [remoteStreams, setRemoteStreams] = useState({});
+  const localVidRef = useRef(null); const localStreamRef = useRef(null); const peersRef = useRef({}); const ringRef = useRef(null); const seenSigRef = useRef({});
+  const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }, ...(turnConfig?.urls ? [turnConfig] : [])];
+  const callDocRef = db.collection('squads').doc(activeCode).collection('calls').doc('live');
+  const sigColRef = db.collection('squads').doc(activeCode).collection('call_signals');
+  const cleanupLocal = () => {
+    Object.values(peersRef.current).forEach(pc => { try { pc.close(); } catch {} }); peersRef.current = {}; setRemoteStreams({});
+    try { localStreamRef.current?.getTracks().forEach(t => t.stop()); } catch {} localStreamRef.current = null; setJoined(false); setSharing(false);
+  };
+  useEffect(() => () => { clearInterval(ringRef.current); cleanupLocal(); }, [activeCode]);
+  useEffect(() => {
+    if (!activeCode) return;
+    return callDocRef.onSnapshot(d => {
+      const data = d.exists ? d.data() : null; setCallState(data);
+      clearInterval(ringRef.current);
+      if (data?.active && !joined && !groupMuted) {
+        playNotificationSound('alarm'); triggerBrowserNotification("📞 " + (squadData.squadName || activeCode), data.starterName + L(" يرن عليكم الآن!", " is calling!", lang));
+        ringRef.current = setInterval(() => playNotificationSound('countdown'), 3200);
+      }
+      if (!data?.active && joined) { cleanupLocal(); toast(L('انتهت المكالمة.', 'Call ended.', lang)); }
+    }, () => {});
+  }, [activeCode, joined, groupMuted]);
+  const makePeer = (peerKey, initiator) => {
+    if (peersRef.current[peerKey]) return peersRef.current[peerKey];
+    const pc = new RTCPeerConnection({ iceServers }); peersRef.current[peerKey] = pc;
+    localStreamRef.current?.getTracks().forEach(t => pc.addTrack(t, localStreamRef.current));
+    pc.onicecandidate = (e) => { if (e.candidate) sigColRef.add({ from: myKey, to: peerKey, type: 'ice', data: e.candidate.toJSON(), ts: Date.now() }).catch(() => {}); };
+    pc.ontrack = (e) => { if (e.streams?.[0]) setRemoteStreams(p => ({ ...p, [peerKey]: e.streams[0] })); };
+    if (initiator) pc.createOffer().then(o => pc.setLocalDescription(o)).then(() => sigColRef.add({ from: myKey, to: peerKey, type: 'offer', data: pc.localDescription.toJSON(), ts: Date.now() })).catch(() => {});
+    return pc;
+  };
+  useEffect(() => {
+    if (!joined || !activeCode) return;
+    const parts = (callState?.participants || []).filter(p => p.key !== myKey);
+    parts.forEach(p => { if (!peersRef.current[p.key] && myKey > p.key) makePeer(p.key, true); });
+    const unsub = sigColRef.where('to', '==', myKey).onSnapshot(async s => {
+      for (const ch of s.docChanges()) {
+        if (ch.type !== 'added' || seenSigRef.current[ch.doc.id]) continue; seenSigRef.current[ch.doc.id] = true;
+        const msg = ch.doc.data(), pc = makePeer(msg.from, false);
+        try {
+          if (msg.type === 'offer') { await pc.setRemoteDescription(new RTCSessionDescription(msg.data)); const ans = await pc.createAnswer(); await pc.setLocalDescription(ans); await sigColRef.add({ from: myKey, to: msg.from, type: 'answer', data: pc.localDescription.toJSON(), ts: Date.now() }); }
+          else if (msg.type === 'answer' && !pc.currentRemoteDescription) await pc.setRemoteDescription(new RTCSessionDescription(msg.data));
+          else if (msg.type === 'ice') await pc.addIceCandidate(new RTCIceCandidate(msg.data));
+        } catch {}
+        ch.doc.ref.delete().catch(() => {});
+      }
+    }, () => {});
+    return () => unsub();
+  }, [joined, activeCode, callState?.participants?.length]);
+  const launchMedia = async (mode) => {
+    setPermModal(null); if (!navigator.mediaDevices?.getUserMedia) return showAlert(L('المتصفح لا يدعم المكالمات.', 'Browser lacks WebRTC media.', lang));
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: mode === 'video' ? { facingMode: facing } : false });
+      localStreamRef.current = stream; setCamOff(mode !== 'video'); setMuted(false); setJoined(true);
+      setTimeout(() => { if (localVidRef.current) localVidRef.current.srcObject = stream; }, 100);
+      if (!callState?.active) await callDocRef.set({ active: true, mode, starterKey: myKey, starterName: myName, participants: [{ key: myKey, name: myName }], startedAt: Date.now() });
+      else await callDocRef.update({ participants: firebase.firestore.FieldValue.arrayUnion({ key: myKey, name: myName }) });
+    } catch { showAlert(L('⚠️ لم نتمكن من فتح الكاميرا/الميكروفون!\nمن أيقونة القفل 🔒 بجانب الرابط في المتصفح: فعّل إذن الكاميرا والميكروفون ثم أعد المحاولة.', '⚠️ Cannot access Camera/Mic!\nTap the Lock 🔒 icon next to the URL, allow Camera & Microphone, and retry.', lang)); }
+  };
+  const toggleScreenShare = async () => {
+    if (!navigator.mediaDevices?.getDisplayMedia) return showAlert(L('مشاركة الشاشة غير مدعومة على هذا المتصفح/الهاتف.', 'Screen share unsupported on this browser/device.', lang));
+    try {
+      if (!sharing) {
+        const scr = await navigator.mediaDevices.getDisplayMedia({ video: true }), vt = scr.getVideoTracks()[0];
+        Object.values(peersRef.current).forEach(pc => { const snd = pc.getSenders().find(s => s.track?.kind === 'video'); if (snd) snd.replaceTrack(vt); });
+        if (localVidRef.current) localVidRef.current.srcObject = scr; setSharing(true);
+        vt.onended = () => toggleScreenShare();
+      } else {
+        const cam = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing } }), vt = cam.getVideoTracks()[0];
+        Object.values(peersRef.current).forEach(pc => { const snd = pc.getSenders().find(s => s.track?.kind === 'video'); if (snd) snd.replaceTrack(vt); });
+        if (localVidRef.current) localVidRef.current.srcObject = localStreamRef.current; setSharing(false);
+      }
+    } catch {}
+  };
+  const flipCam = async () => {
+    const nxt = facing === 'user' ? 'environment' : 'user'; setFacing(nxt);
+    try { const cam = await navigator.mediaDevices.getUserMedia({ video: { facingMode: nxt } }), vt = cam.getVideoTracks()[0]; localStreamRef.current?.getVideoTracks().forEach(t => { t.stop(); localStreamRef.current.removeTrack(t); }); localStreamRef.current?.addTrack(vt); Object.values(peersRef.current).forEach(pc => { const s = pc.getSenders().find(x => x.track?.kind === 'video'); if (s) s.replaceTrack(vt); }); if (localVidRef.current) localVidRef.current.srcObject = localStreamRef.current; } catch {}
+  };
+  const leaveCall = async (endForAll = false) => {
+    if (endForAll) await callDocRef.set({ active: false, participants: [] }).catch(() => {});
+    else { const rem = (callState?.participants || []).filter(p => p.key !== myKey); await callDocRef.set({ active: rem.length > 0, participants: rem }, { merge: true }).catch(() => {}); }
+    cleanupLocal();
+  };
+  return (
+    <div className="space-y-2 text-xs">
+      <div className="flex gap-1.5"><button type="button" onClick={() => setPermModal('audio')} className="px-2.5 py-1.5 bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-black rounded-xl">📞 {L('مكالمة صوت', 'Voice Call', lang)}</button><button type="button" onClick={() => setPermModal('video')} className="px-2.5 py-1.5 bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 font-black rounded-xl">📹 {L('فيديو شلة', 'Video Call', lang)}</button></div>
+      {callState?.active && !joined && <div className="p-3 bg-emerald-500/20 border-2 border-emerald-500 rounded-2xl flex justify-between items-center animate-pulse"><div><strong className="text-emerald-200 block">🔔 {L('مكالمة جارية في الشلة!', 'Incoming Squad Call!', lang)}</strong><span className="text-[10px] text-white">{callState.starterName} ({(callState.participants || []).length})</span></div><button onClick={() => setPermModal(callState.mode || 'video')} className="px-3.5 py-2 bg-emerald-500 text-black font-black rounded-xl">{L('انضمام 📞', 'Join 📞', lang)}</button></div>}
+      {permModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"><div className="bg-neutral-900 border-2 border-amber-500 rounded-3xl p-5 max-w-xs w-full space-y-3 text-center"><div className="text-3xl">🎙️📷</div><strong className="text-amber-400 text-sm block">{L('تفعيل صلاحيات الكاميرا والميكروفون', 'Enable Camera & Microphone', lang)}</strong><p className="text-neutral-300 text-[11px]">{L('عشان المكالمة ومشاركة الشاشة تشتغل مع صحابك، وافق على إذن الكاميرا والمايك من المتصفح.', 'Please allow Camera & Microphone permissions when prompted so the call works properly.', lang)}</p><div className="flex gap-2"><button onClick={() => setPermModal(null)} className="flex-1 py-2 bg-neutral-800 rounded-xl">{L('إلغاء', 'Cancel', lang)}</button><button onClick={() => launchMedia(permModal)} className="flex-1 py-2 bg-emerald-500 text-black font-black rounded-xl">{L('سماح وبدء 📞', 'Allow & Start 📞', lang)}</button></div></div></div>}
+      {joined && <div className="p-3 bg-neutral-950 border-2 border-emerald-500/60 rounded-3xl space-y-2"><div className="grid grid-cols-2 sm:grid-cols-3 gap-2"><div className="relative bg-black rounded-2xl overflow-hidden h-28 border border-amber-500/40"><video ref={localVidRef} autoPlay playsInline muted className="w-full h-full object-cover" /><span className="absolute bottom-1 right-1 bg-black/70 px-1.5 rounded text-[9px] text-amber-300">{myName}</span></div>{Object.entries(remoteStreams).map(([k, st]) => <div key={k} className="relative bg-black rounded-2xl overflow-hidden h-28 border border-neutral-800"><video autoPlay playsInline ref={el => { if (el && el.srcObject !== st) el.srcObject = st; }} className="w-full h-full object-cover" /><span className="absolute bottom-1 right-1 bg-black/70 px-1.5 rounded text-[9px] text-white">{(callState?.participants || []).find(p => p.key === k)?.name || k}</span></div>)}</div><div className="flex flex-wrap justify-center gap-1.5"><button onClick={() => { localStreamRef.current?.getAudioTracks().forEach(t => t.enabled = muted); setMuted(!muted); }} className={"px-3 py-1.5 rounded-xl font-bold " + (muted ? 'bg-rose-600 text-white' : 'bg-neutral-800 text-white')}>{muted ? '🔇' : '🎙️'}</button><button onClick={() => { localStreamRef.current?.getVideoTracks().forEach(t => t.enabled = camOff); setCamOff(!camOff); }} className={"px-3 py-1.5 rounded-xl font-bold " + (camOff ? 'bg-rose-600 text-white' : 'bg-neutral-800 text-white')}>{camOff ? '🚫📷' : '📷'}</button><button onClick={flipCam} className="px-3 py-1.5 bg-neutral-800 text-cyan-300 rounded-xl font-bold">🔄</button><button onClick={toggleScreenShare} className={"px-3 py-1.5 rounded-xl font-bold " + (sharing ? 'bg-amber-500 text-black' : 'bg-neutral-800 text-amber-300')}>🖥️ {sharing ? L('إيقاف', 'Stop', lang) : L('شاشة', 'Share', lang)}</button><button onClick={() => leaveCall(false)} className="px-3 py-1.5 bg-rose-600 text-white font-black rounded-xl">{L('خروج', 'Leave', lang)}</button>{(myRole === 'owner' || myRole === 'admin' || callState?.starterKey === myKey) && <button onClick={() => leaveCall(true)} className="px-3 py-1.5 bg-rose-900 text-rose-200 font-black rounded-xl">{L('إنهاء للكل', 'End All', lang)}</button>}</div></div>}
+    </div>
+  );
+    }
+    function SquadChatBox({ activeCode, squadData, saveSquad, myKey, myName, myRole, custSettings, groupMuted, lang }) {
+  const { showAlert, showConfirm, toast } = useTwixUI();
+  const [msgs, setMsgs] = useState([]); const [text, setText] = useState(''); const [img, setImg] = useState(null);
+  const [replyTo, setReplyTo] = useState(null); const [editTarget, setEditTarget] = useState(null); const [secretMode, setSecretMode] = useState(0);
+  const [viewOnceOpen, setViewOnceOpen] = useState(null); const [voLeft, setVoLeft] = useState(0); const [blurred, setBlurred] = useState(false);
+  const [showPoll, setShowPoll] = useState(false); const [pQ, setPQ] = useState(''); const [pOpts, setPOpts] = useState(['', '', '']);
+  const [searchQ, setSearchQ] = useState(''); const [showMedia, setShowMedia] = useState(false); const [seenInfo, setSeenInfo] = useState(null);
+  const [busy, setBusy] = useState(false); const endRef = useRef(null); const lastSentRef = useRef(0); const seenPrevRef = useRef(0);
+  const hideSeen = !!custSettings.hideSeen, hideOnline = !!custSettings.hideOnline;
+  const colRef = db.collection('squads').doc(activeCode).collection('messages');
+  useEffect(() => {
+    const onBlur = () => { if (viewOnceOpen) setBlurred(true); }; const onFocus = () => setBlurred(false);
+    window.addEventListener('blur', onBlur); window.addEventListener('focus', onFocus);
+    return () => { window.removeEventListener('blur', onBlur); window.removeEventListener('focus', onFocus); };
+  }, [viewOnceOpen]);
+  useEffect(() => {
+    if (!viewOnceOpen || !viewOnceOpen.timerSec) return;
+    setVoLeft(viewOnceOpen.timerSec);
+    const t = setInterval(() => setVoLeft(p => { if (p <= 1) { clearInterval(t); closeSecretModal(viewOnceOpen); return 0; } return p - 1; }), 1000);
+    return () => clearInterval(t);
+  }, [viewOnceOpen?.id]);
+  useEffect(() => {
+    if (!activeCode) return;
+    return colRef.orderBy('createdAtMs', 'asc').onSnapshot(async s => {
+      const nowMs = Date.now(), disMs = Number(squadData.disappearHours || 0) * 3600000, arr = [];
+      for (const d of s.docs) {
+        const o = { id: d.id, ...d.data() };
+        if (disMs > 0 && (nowMs - Number(o.createdAtMs || 0)) > disMs) { d.ref.delete().catch(() => {}); continue; }
+        const pt = await squadDecrypt(o.text, activeCode, squadData.pin);
+        arr.push({ ...o, plainText: pt });
+        if (!hideSeen && o.senderKey !== myKey && !(o.seenBy || []).some(x => x.key === myKey)) d.ref.update({ seenBy: firebase.firestore.FieldValue.arrayUnion({ key: myKey, name: myName, at: getCairoTimeStr(new Date(), lang) }) }).catch(() => {});
+      }
+      if (seenPrevRef.current && arr.length > seenPrevRef.current && !groupMuted) {
+        const lastM = arr[arr.length - 1];
+        if (lastM.senderKey !== myKey && (lastM.plainText || '').includes('@' + myName.split(' ')[0])) { playNotificationSound('cash'); toast("📣 " + lastM.senderName + ": @Mention!"); }
+      }
+      seenPrevRef.current = arr.length; setMsgs(arr);
+    }, () => {});
+  }, [activeCode, squadData.pin, squadData.disappearHours, hideSeen, groupMuted]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [msgs.length]);
+  const closeSecretModal = (m) => { if (m && !(m.openedBy || []).includes(myKey)) colRef.doc(m.id).update({ openedBy: firebase.firestore.FieldValue.arrayUnion(myKey) }).catch(() => {}); setViewOnceOpen(null); setBlurred(false); };
+  const sendMsg = async ({ audioBase64 = null, durationSec = 0 } = {}) => {
+    if (squadData.adminOnlyChat && myRole === 'member') return showAlert(L('الشات للمشرفين فقط الآن.', 'Admins-only mode enabled.', lang));
+    if ((squadData.mutedKeys || []).includes(myKey)) return showAlert(L('أنت مكتوم حالياً في الشلة.', 'You are muted in this squad.', lang));
+    const slow = Number(squadData.slowModeSec || 0); if (myRole === 'member' && slow > 0 && (Date.now() - lastSentRef.current) < slow * 1000) return showAlert(L("انتظر " + slow + "ث (الوضع البطيء).", "Slow mode: wait " + slow + "s.", lang));
+    const clean = text.trim(); if ((!clean && !img && !audioBase64) || busy) return;
+    setBusy(true); const imgSend = img; setImg(null); setText('');
+    try {
+      if (editTarget) { const enc = await squadEncrypt(clean, activeCode, squadData.pin); await colRef.doc(editTarget.id).update({ text: enc, edited: true }); setEditTarget(null); setBusy(false); return; }
+      const id = "sm-" + Date.now() + "-" + Math.random().toString(36).slice(2, 5), enc = await squadEncrypt(clean, activeCode, squadData.pin);
+      await colRef.doc(id).set({ id, senderKey: myKey, senderName: myName, text: enc, image: imgSend || null, audioBase64: audioBase64 || null, durationSec, viewOnce: secretMode === 1, timerSec: secretMode > 1 ? secretMode : 0, openedBy: [], seenBy: [], reactions: {}, replyTo: replyTo ? { senderName: replyTo.senderName, snippet: (replyTo.plainText || '🎤/📸').slice(0, 45) } : null, time: getCairoTimeStr(new Date(), lang), createdAtMs: Date.now() });
+      lastSentRef.current = Date.now(); setReplyTo(null); setSecretMode(0); saveSquad({ msgCount: firebase.firestore.FieldValue.increment(1) }); playNotificationSound('click');
+    } catch { toast(L('فشل الإرسال.', 'Failed to send.', lang), 'err'); } finally { setBusy(false); }
+  };
+  const sendPoll = async (e) => {
+    e.preventDefault(); const opts = pOpts.map(o => o.trim()).filter(Boolean); if (!pQ.trim() || opts.length < 2) return showAlert(L('اكتب سؤالاً وخيارين على الأقل.', 'Question & 2+ options required.', lang));
+    const id = "sm-" + Date.now(); await colRef.doc(id).set({ id, senderKey: myKey, senderName: myName, text: await squadEncrypt("📊 " + pQ.trim(), activeCode, squadData.pin), poll: { q: pQ.trim(), options: opts, votes: {} }, seenBy: [], reactions: {}, time: getCairoTimeStr(new Date(), lang), createdAtMs: Date.now() });
+    setPQ(''); setPOpts(['', '', '']); setShowPoll(false);
+  };
+  const shown = msgs.filter(m => !searchQ.trim() || (m.plainText || '').toLowerCase().includes(searchQ.toLowerCase()));
+  return (
+    <div className={"bg-neutral-900 border border-neutral-800 rounded-3xl p-4 space-y-2.5 text-xs " + (squadData.protectContent ? 'select-none' : '')} onContextMenu={e => { if (squadData.protectContent) e.preventDefault(); }}>
+      <div className="flex flex-wrap justify-between items-center gap-1.5 border-b border-neutral-800 pb-2"><div className="flex gap-1.5"><input value={searchQ} onChange={e => setSearchQ(e.target.value)} placeholder={L('🔍 بحث...', '🔍 Search...', lang)} className="w-24 bg-neutral-950 border border-neutral-800 rounded-lg px-2 py-1 text-[10px] text-white" /><button type="button" onClick={() => setShowMedia(!showMedia)} className="px-2 py-1 bg-neutral-800 text-cyan-300 rounded-lg text-[10px]">🖼️ {msgs.filter(m => m.image && !m.viewOnce && !m.timerSec).length}</button><button type="button" onClick={() => setShowPoll(!showPoll)} className="px-2 py-1 bg-neutral-800 text-purple-300 rounded-lg text-[10px]">📊</button></div><button type="button" onClick={() => { if (!hideOnline) saveSquad({ typingKey: myKey, typingName: myName, typingAt: Date.now() }); sendMsg(); }} className="hidden" /><button type="button" onClick={() => { setText(L("💵 فاتورة الشلة: الإجمالي " + (squadData.totalBill || 0) + "ج ÷ " + ((squadData.splitPlayers || []).length || 1) + " لاعبين", "💵 Squad Bill: Total " + (squadData.totalBill || 0) + " EGP / " + ((squadData.splitPlayers || []).length || 1) + " players", lang)); }} className="px-2 py-1 bg-amber-500/20 text-amber-300 rounded-lg text-[10px] font-bold">💵 {L('إرسال الفاتورة', 'Share Bill', lang)}</button></div>
+      {squadData.pinnedMsg && <div className="p-2 bg-amber-500/15 border border-amber-500/40 rounded-xl flex justify-between items-center text-[10px]"><span className="text-amber-200 truncate">📌 {squadData.pinnedMsg}</span>{(myRole !== 'member') && <button onClick={() => saveSquad({ pinnedMsg: '' })} className="text-neutral-400">✕</button>}</div>}
+      {showPoll && <form onSubmit={sendPoll} className="p-2.5 bg-neutral-950 rounded-2xl border border-purple-500/40 space-y-1.5"><input value={pQ} onChange={e => setPQ(e.target.value)} placeholder={L('سؤال التصويت...', 'Poll question...', lang)} className="w-full bg-neutral-900 p-1.5 rounded-lg text-white font-bold" />{pOpts.map((o, idx) => <input key={idx} value={o} onChange={e => setPOpts(pOpts.map((x, i) => i === idx ? e.target.value : x))} placeholder={L('خيار ', 'Option ', lang) + (idx + 1)} className="w-full bg-neutral-900 p-1.5 rounded-lg text-white text-[10px]" />)}<button className="w-full py-1.5 bg-purple-600 text-white font-black rounded-lg">{L('نشر التصويت 📊', 'Post Poll 📊', lang)}</button></form>}
+      {showMedia ? <div className="grid grid-cols-3 gap-2 max-h-56 overflow-y-auto p-2 bg-neutral-950 rounded-2xl">{msgs.filter(m => m.image && !m.viewOnce && !m.timerSec).map(m => <img key={m.id} src={m.image} className="w-full h-20 object-cover rounded-xl" />)}</div> : <div className="h-60 overflow-y-auto space-y-2 p-2.5 bg-neutral-950 rounded-2xl border border-neutral-800 no-scrollbar">{shown.length === 0 ? <p className="text-center text-neutral-500 py-20">{L('ابدأ أول رسالة في الشلة!', 'Say hi to your squad!', lang)}</p> : shown.map(m => { const mine = m.senderKey === myKey, isSecret = m.viewOnce || m.timerSec > 0, opened = (m.openedBy || []).includes(myKey), canDel = mine || myRole !== 'member', readers = (m.seenBy || []).filter(s => s.key !== m.senderKey); return (<div key={m.id} className={"p-2.5 rounded-2xl max-w-[85%] space-y-1 " + (mine ? 'bg-amber-500 text-black mr-auto' : 'bg-neutral-900 border border-neutral-800 text-white ml-auto')}>{m.replyTo && <div className={"p-1 rounded-lg text-[9px] border-r-2 " + (mine ? 'bg-black/15 border-black' : 'bg-neutral-950 border-amber-500')}><strong>{m.replyTo.senderName}:</strong> {m.replyTo.snippet}</div>}<div className="flex justify-between gap-2 text-[9px] opacity-80"><strong>{m.senderName}</strong><span className="font-mono">{m.time}{m.edited ? L(' (مُعدّلة)', ' (edited)', lang) : ''}</span></div>{isSecret ? (opened && !mine ? <div className="p-2 rounded-xl bg-black/25 text-[10px] italic">🔒 {L('تم الفتح والإغلاق', 'Opened & Locked', lang)}</div> : <button type="button" onClick={() => setViewOnceOpen(m)} className="w-full py-2 px-3 rounded-xl bg-black/30 border border-white/20 font-black text-[10px]">{m.viewOnce ? L('1️⃣ اضغط للفتح (مرة واحدة)', '1️⃣ Open View-Once', lang) : ("⏱️ " + L('فتح بمؤقت ', 'Open Timed ', lang) + m.timerSec + L('ث', 's', lang))}</button>) : <>{m.image && <img src={m.image} className="max-h-40 rounded-xl" />}{m.audioBase64 && <AudioPlayerBubble src={m.audioBase64} durationSec={m.durationSec} dark={!mine} />}{m.plainText && <p className="whitespace-pre-line">{m.plainText}</p>}</>}{m.poll && <div className="space-y-1 pt-1">{m.poll.options.map((op, oi) => { const votes = m.poll.votes || {}, cnt = Object.values(votes).filter(v => v === oi).length, tot = Object.keys(votes).length || 1, pct = Object.keys(votes).length ? Math.round((cnt / tot) * 100) : 0; return <button key={oi} type="button" onClick={() => colRef.doc(m.id).update({ ["poll.votes." + myKey]: oi })} className="w-full p-1.5 rounded-lg bg-black/25 text-right flex justify-between text-[10px]"><span>{op} {votes[myKey] === oi ? '✓' : ''}</span><span className="font-mono font-bold">{pct}% ({cnt})</span></button>; })}</div>}{Object.keys(m.reactions || {}).length > 0 && <div className="flex flex-wrap gap-1">{Object.values(m.reactions).map((e, i) => <span key={i} className="text-[11px] bg-black/20 px-1.5 rounded-full">{e}</span>)}</div>}<div className="flex flex-wrap justify-between items-center gap-2 text-[9px] opacity-85"><div className="flex gap-1.5"><button type="button" onClick={() => setReplyTo(m)} className="underline">{L('رد', 'Reply', lang)}</button>{['❤️', '🔥', '😂'].map(em => <button key={em} type="button" onClick={() => colRef.doc(m.id).update({ ["reactions." + myKey]: em })}>{em}</button>)}{mine && !isSecret && !m.poll && m.plainText && (Date.now() - Number(m.createdAtMs || 0)) <= 300000 && <button type="button" onClick={() => { setEditTarget(m); setText(m.plainText); }} className="underline">{L('تعديل', 'Edit', lang)}</button>}{(myRole !== 'member') && m.plainText && <button type="button" onClick={() => saveSquad({ pinnedMsg: m.plainText.slice(0, 80) })} className="underline">📌</button>}{canDel && <button type="button" onClick={async () => { if (await showConfirm(L('حذف الرسالة نهائياً للجميع؟', 'Delete for everyone?', lang), '', true)) colRef.doc(m.id).delete(); }} className="text-rose-700 font-black underline">{L('حذف', 'Del', lang)}</button>}</div>{mine && <button type="button" onClick={() => setSeenInfo(readers)} className="font-bold">{hideSeen ? '✓' : (readers.length > 0 ? ("👁️ " + readers.length) : '✓✓')}</button>}</div></div>); })}<div ref={endRef} /></div>}
+      <div className="flex gap-1 overflow-x-auto no-scrollbar items-center text-[10px]">{[[0, L('عادي', 'Normal', lang)], [1, L('1️⃣ مرة واحدة', '1️⃣ View Once', lang)], [5, '⏱️ 5s'], [10, '⏱️ 10s'], [30, '⏱️ 30s']].map(([v, l]) => <button key={v} type="button" onClick={() => setSecretMode(v)} className={"px-2 py-0.5 rounded-lg border shrink-0 font-bold " + (secretMode === v ? 'bg-purple-600 text-white border-purple-400' : 'bg-neutral-950 border-neutral-800 text-neutral-400')}>{l}</button>)}{(squadData.members || []).slice(0, 5).map((m, i) => { const nm = typeof m === 'string' ? m : m.name; return <button key={i} type="button" onClick={() => setText(p => p + "@" + nm.split(' ')[0] + " ")} className="px-1.5 py-0.5 bg-neutral-950 text-cyan-300 rounded border border-neutral-800 shrink-0">@{nm.split(' ')[0]}</button>; })}</div>
+      {(replyTo || editTarget) && <div className="p-2 bg-neutral-950 rounded-xl border border-amber-500/40 flex justify-between text-[10px]"><span>{editTarget ? L('✏️ تعديل', '✏️ Edit', lang) : ("↩️ " + replyTo.snippet)}</span><button onClick={() => { setReplyTo(null); setEditTarget(null); setText(''); }}>✕</button></div>}
+      {img && <div className="relative w-fit"><img src={img} className="max-h-14 rounded-lg" /><button onClick={() => setImg(null)} className="absolute -top-1 -right-1 bg-rose-600 text-white rounded-full w-4 h-4 text-[9px]">✕</button></div>}
+      <form onSubmit={e => { e.preventDefault(); sendMsg(); }} className="flex gap-1.5 items-center"><input value={text} onChange={e => setText(e.target.value)} placeholder={L('رسالة مشفرة للشلة...', 'Encrypted squad message...', lang)} className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-3 py-2 text-white" /><FilePickerButton onPick={setImg} label="📷" className="px-2.5 py-2 bg-neutral-800 text-cyan-300 rounded-xl font-bold" /><VoiceMicButton lang={lang} disabled={busy} onSendAudio={a => sendMsg(a)} /><button disabled={busy} className="px-3 py-2 bg-amber-500 text-black font-black rounded-xl">{editTarget ? L('حفظ', 'Save', lang) : L('إرسال', 'Send', lang)}</button></form>
+      {seenInfo && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"><div className="bg-neutral-900 border border-amber-500/40 rounded-3xl p-5 max-w-xs w-full space-y-2"><div className="flex justify-between"><strong className="text-amber-400">👁️ {L('من شاهد الرسالة:', 'Seen by:', lang)}</strong><button onClick={() => setSeenInfo(null)}>✕</button></div>{hideSeen ? <p className="text-neutral-300">{L('أوقفت إشعارات القراءة (Seen) من الإعدادات، لذلك لا يظهر لك من شاهد رسائلك.', 'Hidden because you disabled Read Receipts.', lang)}</p> : (seenInfo.length === 0 ? <p className="text-neutral-400">{L('لم يقرأها أحد بعد.', 'Nobody yet.', lang)}</p> : seenInfo.map((s, i) => <div key={i} className="p-2 bg-neutral-950 rounded-xl flex justify-between"><span>{s.name}</span><span className="font-mono text-[10px] text-amber-300">{s.at}</span></div>))}</div></div>}
+      {viewOnceOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4 select-none"><div className="bg-neutral-900 border-2 border-purple-500 rounded-3xl p-5 max-w-sm w-full space-y-3 text-center"><div className="flex justify-between"><strong className="text-purple-300">{viewOnceOpen.viewOnce ? L('1️⃣ عرض لمرة واحدة', '1️⃣ View Once', lang) : ("⏱️ " + voLeft + L('ث', 's', lang))}</strong><button onClick={() => closeSecretModal(viewOnceOpen)}>✕</button></div><div className={blurred ? 'blur-xl' : ''}>{viewOnceOpen.image && <img src={viewOnceOpen.image} className="max-h-72 mx-auto rounded-2xl pointer-events-none" />}{viewOnceOpen.audioBase64 && <AudioPlayerBubble src={viewOnceOpen.audioBase64} durationSec={viewOnceOpen.durationSec} />}{viewOnceOpen.plainText && <p className="text-white text-sm font-bold p-3 bg-neutral-950 rounded-2xl">{viewOnceOpen.plainText}</p>}</div><button onClick={() => closeSecretModal(viewOnceOpen)} className="w-full py-2 bg-purple-600 text-white font-black rounded-xl">{L('إغلاق وقفل للأبد', 'Close & Lock', lang)}</button></div></div>}
+    </div>
+  );
+      }
+    function SquadHubPage({ currentCustomer, snacksMenu, squadUnreadMap, setSquadUnreadMap, setMySquadsList, custSettings = {}, config = DEFAULT_CONFIG, lang = 'ar' }) {
+  const { showAlert, showDoubleConfirm, toast } = useTwixUI();
+  const [hubTab, setHubTab] = useState('chat'); const [activeCode, setActiveCode] = useState(() => localStorage.getItem('twix_active_squad') || '');
+  const [codeInput, setCodeInput] = useState(''); const [pinInput, setPinInput] = useState(''); const [showMembers, setShowMembers] = useState(false);
+  const [mySquads, setMySquads] = useState(() => safeJSONParse('twix_my_squads_list', []));
+  const [mutedSquads, setMutedSquads] = useState(() => safeJSONParse('twix_muted_squads', {}));
+  const [squadData, setSquadData] = useState({ members: [], totalBill: 0, splitPlayers: [], pin: '', ownerKey: '' });
+  const [pinVerified, setPinVerified] = useState(false); const lastWinnerRef = useRef('');
+  const { fp } = getDeviceFingerprint(), myKey = currentCustomer?.phone || fp, myName = currentCustomer?.name || L('عضو الشلة', 'Squad Member', lang);
+  useEffect(() => {
+    if (!activeCode) { setPinVerified(false); return; }
+    const ref = db.collection('squads').doc(activeCode);
+    const unsub = ref.onSnapshot(doc => {
+      if (doc.exists) {
+        const d = { members: [], totalBill: 0, splitPlayers: [], pin: '', ...doc.data() }; setSquadData(d);
+        if ((d.bannedKeys || []).includes(myKey)) { showAlert(L('🚫 تم طردك وحظرك من هذه الشلة.', '🚫 You were removed from this squad.', lang)); try { localStorage.removeItem('twix_active_squad'); } catch {} setActiveCode(''); return; }
+        const okPin = !d.pin || safeJSONParse('twix_squad_pins', {})[activeCode] === d.pin; setPinVerified(okPin);
+        const mems = (d.members || []).map((m, i) => typeof m === 'string' ? { key: m, name: m, role: i === 0 ? 'owner' : 'member' } : m);
+        const alreadyIn = mems.some(m => m.key === myKey || m.name === myName);
+        if (okPin && !alreadyIn) {
+          if (d.requireApproval) {
+            if (!(d.pendingRequests || []).some(r => r.key === myKey)) ref.update({ pendingRequests: firebase.firestore.FieldValue.arrayUnion({ key: myKey, phone: currentCustomer?.phone || '', name: myName }) }).catch(() => {});
+          } else { ref.update({ members: firebase.firestore.FieldValue.arrayUnion({ key: myKey, phone: currentCustomer?.phone || '', name: myName, role: mems.length === 0 ? 'owner' : 'member' }) }).catch(() => {}); }
+        }
+        const today = getCairoDateStr(), prev = d.lastStreakDate ? getPrevDateStr(today) : '';
+        if (d.lastStreakDate !== today) ref.set({ lastStreakDate: today, streakDays: d.lastStreakDate === prev ? (Number(d.streakDays || 1) + 1) : (d.streakDays || 1) }, { merge: true }).catch(() => {});
+        if (!custSettings.hideOnline) ref.set({ ["onlineMap." + myKey]: Date.now() }, { merge: true }).catch(() => {});
+        setSquadUnreadMap(p => ({ ...p, [activeCode]: 0 }));
+      } else {
+        const init = { squadName: activeCode, ownerKey: myKey, members: [{ key: myKey, phone: currentCustomer?.phone || '', name: myName, role: 'owner' }], totalBill: 0, splitPlayers: [{ id: 1, name: myName, snacks: {} }], pin: '', streakDays: 1, lastStreakDate: getCairoDateStr() };
+        ref.set(init); setSquadData(init); setPinVerified(true);
+      }
+    }, () => {});
+    return () => unsub();
+  }, [activeCode, custSettings.hideOnline]);
+  const handleJoin = (raw) => {
+    const c = raw.trim().toUpperCase(); if (!c) return showAlert(L('اكتب كود الشلة!', 'Enter squad code!', lang));
+    if (!mySquads.includes(c)) { const u = [...mySquads, c]; setMySquads(u); setMySquadsList(u); safeSetStorage('twix_my_squads_list', u); }
+    safeSetStorage('twix_active_squad', c); setActiveCode(c); setCodeInput('');
+  };
+  const removeFromMyList = async (code) => {
+    if (!(await showDoubleConfirm(L("إزالة شلة [" + code + "] من قائمتك ومغادرتها؟", "Leave & remove squad [" + code + "] from your list?", lang)))) return;
+    const nxt = mySquads.filter(x => x !== code); setMySquads(nxt); setMySquadsList(nxt); safeSetStorage('twix_my_squads_list', nxt);
+    if (activeCode === code) { try { localStorage.removeItem('twix_active_squad'); } catch {} setActiveCode(''); }
+  };
+  const otherUnread = Object.entries(squadUnreadMap || {}).filter(([k]) => k !== activeCode).reduce((s, [, v]) => s + Number(v || 0), 0);
+  if (!activeCode) return (
+    <div className="max-w-md mx-auto py-10 space-y-4 text-xs text-center">
+      <h1 className="text-2xl font-black text-white">👥 {L('جروب الشلة السري والستوري وحاسبة الفاتورة', 'Private Squad Hub, Stories & Bill Splitter', lang)}</h1>
+      <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3"><input value={codeInput} onChange={e => setCodeInput(e.target.value.toUpperCase())} placeholder={L('كود الشلة (مثال: SHILLA2026)', 'Squad Code...', lang)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-center text-amber-400 font-mono font-black uppercase" /><button onClick={() => handleJoin(codeInput)} className="w-full py-2.5 bg-amber-500 text-black font-black rounded-xl">{L('دخول / إنشاء الشلة ➔', 'Join / Create Squad →', lang)}</button><button onClick={() => handleJoin("TX-" + Math.random().toString(36).slice(2, 8).toUpperCase())} className="w-full py-2 bg-neutral-800 text-amber-300 rounded-xl font-bold">🎲 {L('توليد كود شلة سري جديد', 'Generate Secret Code', lang)}</button></div>
+      {mySquads.length > 0 && <div className="p-4 bg-neutral-900 rounded-3xl border border-neutral-800 text-right space-y-2"><strong className="block">{L('شللي السابقة:', 'My Squads:', lang)}</strong><div className="flex flex-wrap gap-2">{mySquads.map(c => <div key={c} className="flex items-center bg-neutral-950 border border-amber-500/40 rounded-xl overflow-hidden"><button onClick={() => handleJoin(c)} className="px-3 py-1.5 text-amber-400 font-mono font-bold">{c}{(squadUnreadMap[c] || 0) > 0 && <span className="ml-1.5 bg-rose-600 text-white px-1.5 rounded-full text-[9px]">{squadUnreadMap[c]}</span>}</button><button onClick={() => removeFromMyList(c)} className="px-2 py-1.5 text-rose-400 border-r border-neutral-800 text-[10px]">✕</button></div>)}</div></div>}
+    </div>
+  );
+  if (!pinVerified && squadData.pin) return (<div className="max-w-xs mx-auto py-12 text-center space-y-3 text-xs"><h2 className="text-lg font-black text-amber-400">🔒 {L('الشلة محمية بـ PIN', 'Squad PIN Protected', lang)} ({activeCode})</h2><input type="password" inputMode="numeric" value={pinInput} onChange={e => setPinInput(e.target.value)} placeholder={L('الرقم السري', 'Enter PIN', lang)} className="w-full bg-neutral-900 border border-neutral-800 p-3 rounded-xl text-center text-white font-mono" /><button onClick={() => { if (pinInput.trim() === squadData.pin) { const sp = safeJSONParse('twix_squad_pins', {}); sp[activeCode] = squadData.pin; safeSetStorage('twix_squad_pins', sp); setPinVerified(true); setPinInput(''); } else showAlert(L('PIN غير صحيح!', 'Wrong PIN!', lang)); }} className="w-full py-2.5 bg-amber-500 text-black font-black rounded-xl">{L('دخول', 'Enter', lang)}</button><button onClick={() => { try { localStorage.removeItem('twix_active_squad'); } catch {} setActiveCode(''); }} className="text-neutral-400 underline">{L('رجوع', 'Back', lang)}</button></div>);
+  const normMems = (squadData.members || []).map((m, i) => typeof m === 'string' ? { key: m, name: m, role: i === 0 ? 'owner' : 'member' } : m);
+  const myMem = normMems.find(m => m.key === myKey), myRole = squadData.ownerKey === myKey ? 'owner' : (myMem?.role || 'member');
+  if (squadData.requireApproval && myRole === 'member' && !myMem) return <div className="max-w-sm mx-auto py-12 text-center space-y-3 text-xs bg-neutral-900 p-6 rounded-3xl border border-amber-500/40"><div className="text-4xl">⏳</div><strong className="text-amber-300 block">{L('بانتظار موافقة مشرفي الشلة على دخولك!', 'Waiting for Squad Admin approval!', lang)}</strong><button onClick={() => { try { localStorage.removeItem('twix_active_squad'); } catch {} setActiveCode(''); }} className="px-4 py-2 bg-neutral-800 rounded-xl">{L('رجوع', 'Back', lang)}</button></div>;
+  const saveSquad = (patch) => db.collection('squads').doc(activeCode).set(patch, { merge: true }), groupMuted = !!mutedSquads[activeCode];
+  return (
+    <div className="max-w-3xl mx-auto py-6 space-y-4 text-xs">
+      <div className="flex flex-wrap justify-between items-center bg-neutral-900 p-4 rounded-3xl border border-neutral-800 gap-2">
+        <div className="flex items-center gap-3">{squadData.squadPhoto ? <img src={squadData.squadPhoto} className="w-11 h-11 rounded-2xl object-cover border border-amber-500" /> : <div className="w-11 h-11 rounded-2xl bg-amber-500/20 flex items-center justify-center text-xl">👥</div>}<div><h1 className="text-base font-black text-white">{squadData.squadName || activeCode} <span className="text-amber-400 font-mono text-xs">({activeCode})</span></h1><span className="text-[10px] text-orange-400 font-bold">🔥 {squadData.streakDays || 1} {L('يوم متواصل', 'Day Streak', lang)} • {normMems.length} {L('أعضاء', 'Members', lang)}</span></div></div>
+        <div className="flex flex-wrap gap-1.5"><button onClick={() => setShowMembers(true)} className="px-2.5 py-1.5 bg-purple-600 text-white rounded-xl font-black">👥 {L('الأعضاء والإدارة', 'Members & Roles', lang)}</button><button onClick={() => { const nxt = { ...mutedSquads, [activeCode]: !groupMuted }; setMutedSquads(nxt); safeSetStorage('twix_muted_squads', nxt); }} className="px-2.5 py-1.5 bg-neutral-800 text-cyan-300 rounded-xl font-bold">{groupMuted ? '🔕' : '🔔'}</button><button onClick={() => { navigator.clipboard.writeText(activeCode); toast('📋'); }} className="px-2.5 py-1.5 bg-neutral-800 text-white rounded-xl font-bold">📋</button><button onClick={() => { try { localStorage.removeItem('twix_active_squad'); } catch {} setActiveCode(''); }} className="px-2.5 py-1.5 bg-neutral-800 text-rose-300 rounded-xl font-bold">{L('تغيير', 'Switch', lang)}{otherUnread > 0 ? (" 🔔" + otherUnread) : ''}</button></div>
+      </div>
+      <SquadStoriesSection activeCode={activeCode} squadData={squadData} myKey={myKey} myName={myName} myRole={myRole} hideSeen={!!custSettings.hideSeen} onReplyToChat={async txt => { await db.collection('squads').doc(activeCode).collection('messages').doc("sm-" + Date.now()).set({ id: "sm-" + Date.now(), senderKey: myKey, senderName: myName, text: await squadEncrypt(txt, activeCode, squadData.pin), seenBy: [], reactions: {}, time: getCairoTimeStr(new Date(), lang), createdAtMs: Date.now() }); setHubTab('chat'); }} lang={lang} />
+      <SquadCallRoom activeCode={activeCode} squadData={squadData} myKey={myKey} myName={myName} myRole={myRole} groupMuted={groupMuted} turnConfig={config.turnConfig} lang={lang} />
+      <div className="flex gap-2 bg-neutral-900 p-1.5 rounded-2xl border border-neutral-800">{[['chat', L('💬 شات الشلة', '💬 Squad Chat', lang)], ['splitter', L('💵 حاسبة الفاتورة', '💵 Bill Splitter', lang)], ['wheel', L('🎯 قرعة المشاريب', '🎯 Drink Raffle', lang)]].map(([id, l]) => <button key={id} onClick={() => setHubTab(id)} className={"flex-1 py-2 rounded-xl font-black " + (hubTab === id ? 'bg-amber-500 text-black' : 'text-neutral-400')}>{l}</button>)}</div>
+      {hubTab === 'chat' ? <SquadChatBox activeCode={activeCode} squadData={squadData} saveSquad={saveSquad} myKey={myKey} myName={myName} myRole={myRole} custSettings={custSettings} groupMuted={groupMuted} lang={lang} /> : <SquadBillAndRaffle hubTab={hubTab} squadData={squadData} saveSquad={saveSquad} snacksMenu={snacksMenu} lastWinnerRef={lastWinnerRef} lang={lang} />}
+      {showMembers && <SquadMembersModal activeCode={activeCode} squadData={squadData} saveSquad={saveSquad} myKey={myKey} myName={myName} myRole={myRole} onClose={() => setShowMembers(false)} onDeleteSquad={async () => { if (await showDoubleConfirm(L("حذف الشلة [" + activeCode + "] نهائياً؟", "Delete squad [" + activeCode + "] forever?", lang))) { await db.collection('squads').doc(activeCode).delete(); setShowMembers(false); removeFromMyList(activeCode); } }} lang={lang} />}
+    </div>
+  );
+                                    }
+    function InLoungePage({ devices, snacksMenu, currentCustomer, qrDevicePref, custSettings, lang }) {
+  const { showAlert, toast } = useTwixUI();
+  const [tableScreenId, setTableScreenId] = useState(qrDevicePref || devices[0]?.id || 'd1');
+  const [orderQty, setOrderQty] = useState({}); const [sugarPick, setSugarPick] = useState({});
+  const [myTableReqs, setMyTableReqs] = useState([]); const [busy, setBusy] = useState(false); const lastTableOrderRef = useRef(0);
+  useEffect(() => { if (qrDevicePref && devices.some(d => d.id === qrDevicePref)) setTableScreenId(qrDevicePref); }, [qrDevicePref, devices.length]);
+  useEffect(() => {
+    const dev = devices.find(d => d.id === tableScreenId); if (!dev) return;
+    return db.collection('in_lounge_requests').where('deviceId', '==', dev.id).onSnapshot(s => { const l = []; s.forEach(d => l.push(d.data())); l.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')); setMyTableReqs(l.slice(0, 6)); }, () => {});
+  }, [tableScreenId, devices.length]);
+  const senderLabel = (custSettings?.useNickname && custSettings?.nickname) ? custSettings.nickname : (currentCustomer?.name || L('زبون الطاولة', 'Table Guest', lang));
+  const sendSvc = (type, detail) => {
+    const dev = devices.find(d => d.id === tableScreenId) || devices[0], id = "req-" + Date.now() + "-" + Math.random().toString(36).slice(2, 5);
+    db.collection('in_lounge_requests').doc(id).set({ id, deviceId: dev?.id || 'd1', screenName: dev?.name || 'طاولة', customerName: senderLabel, customerPhone: currentCustomer?.phone || '', type, detail, status: 'pending', prepStage: 'received', time: getCairoTimeStr(new Date(), lang), createdAt: new Date().toISOString() });
+    logSystemEvent(senderLabel, 'TABLE_REQUEST', (dev?.name || '') + ": " + detail); playNotificationSound('cash'); toast(L("✓ تم إرسال: ", "✓ Sent: ", lang) + detail);
+  };
+  const sendSnacks = async () => {
+    if (busy) return; if (!currentCustomer && !qrDevicePref) return showAlert(L('يرجى مسح كود QR الطاولة في الصالة أو تسجيل الدخول أولاً لطلب الكافتيريا.', 'Please scan the table QR inside the lounge or sign in first.', lang));
+    if (Date.now() - lastTableOrderRef.current < 15000) return showAlert(L('انتظر 15 ثانية قبل إرسال طلب جديد.', 'Please wait 15 seconds between orders.', lang));
+    const items = [], deltaMap = {}; let total = 0;
+    snacksMenu.forEach(s => { const q = orderQty[s.id] || 0; if (q > 0) { total += q * s.price; deltaMap[s.id] = -q; const sugObj = SUGAR_OPTIONS.find(o => o.id === (sugarPick[s.id] || custSettings?.prefSugar || 'medium')); items.push({ id: s.id, name: s.name, qty: q, price: s.price, label: (lang === 'en' ? (s.nameEn || s.name) : s.name) + " x" + q + (s.hasSugarOption ? (" [" + (lang === 'en' ? sugObj?.labelEn : sugObj?.label) + "]") : '') }); } });
+    if (!items.length) return showAlert(L('اختر صنفاً واحداً على الأقل!', 'Select at least 1 item!', lang));
+    setBusy(true);
+    try {
+      await atomicAdjustSnackStock(deltaMap);
+      const dev = devices.find(d => d.id === tableScreenId) || devices[0], id = "req-" + Date.now() + "-" + Math.random().toString(36).slice(2, 5);
+      await db.collection('in_lounge_requests').doc(id).set({ id, deviceId: dev?.id || 'd1', screenName: dev?.name || 'طاولة', customerName: senderLabel, customerPhone: currentCustomer?.phone || '', type: 'cafeteria_order', detail: L("طلب كافتيريا (", "Cafeteria (", lang) + total + L("ج): ", " EGP): ", lang) + items.map(i => i.label).join('، '), snackItems: items, snackDeltaMap: deltaMap, snackTotal: total, status: 'pending', prepStage: 'received', time: getCairoTimeStr(new Date(), lang), createdAt: new Date().toISOString() });
+      lastTableOrderRef.current = Date.now(); setOrderQty({}); playNotificationSound('cash'); toast(L("✓ وصل طلبك (" + total + "ج)!", "✓ Order sent (" + total + " EGP)!", lang));
+    } catch (err) { showAlert(err?.message || 'Error'); } finally { setBusy(false); }
+  };
+  return (
+    <div className="max-w-2xl mx-auto py-6 space-y-5 text-xs">
+      <div className="text-center space-y-1"><h1 className="text-2xl font-black text-white">🛎️ {L('خدمات وطلبات الطاولة لكرسيك', 'In-Lounge Table Service', lang)}</h1>{qrDevicePref && <span className="text-[11px] bg-emerald-500/20 text-emerald-300 px-3 py-0.5 rounded-full font-bold">📱 {L('تم التعرف على شاشتك عبر QR', 'Screen linked via QR', lang)}</span>}</div>
+      <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-4">
+        <select value={tableScreenId} onChange={e => setTableScreenId(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-white font-bold">{devices.map(d => <option key={d.id} value={d.id}>{lang === 'en' ? (d.nameEn || d.name) : d.name} ({d.type})</option>)}</select>
+        <div className="grid grid-cols-2 gap-2.5"><button onClick={() => sendSvc('pager', L('نداء الكابتن للطاولة', 'Call Captain', lang))} className="p-3 bg-amber-500 text-black font-black rounded-2xl">🔔 {L('نداء الكابتن', 'Call Staff', lang)}</button><button onClick={() => sendSvc('controller', L('استبدال ذراع تحكم', 'Replace Controller', lang))} className="p-3 bg-neutral-950 border border-neutral-800 text-amber-300 font-bold rounded-2xl">🎮 {L('استبدال دراع', 'Swap Pad', lang)}</button><button onClick={() => sendSvc('charger', L('طلب شاحن موبايل', 'Need Phone Charger', lang))} className="p-3 bg-neutral-950 border border-neutral-800 text-cyan-300 font-bold rounded-2xl">🔌 {L('شاحن موبايل', 'Charger', lang)}</button><button onClick={() => sendSvc('cozy', L('ضبط إضاءة أو مسند', 'Adjust Lights/Seat', lang))} className="p-3 bg-neutral-950 border border-neutral-800 text-neutral-200 font-bold rounded-2xl">🛋️ {L('راحة الكرسي', 'Comfort', lang)}</button></div>
+        <div className="p-3.5 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-2.5"><strong className="text-amber-400 block">🍔 {L('اطلب من الكافتيريا لكرسيك:', 'Order Snacks to Seat:', lang)}</strong><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{snacksMenu.filter(s => s.available !== false).map(sn => { const out = (sn.stock ?? 0) <= 0, q = orderQty[sn.id] || 0; return <div key={sn.id} className={"p-2 bg-neutral-900 border rounded-xl space-y-1 " + (out ? 'opacity-50 border-rose-900/50' : 'border-neutral-800')}><div className="flex justify-between text-[11px]"><span className="truncate font-bold">{sn.icon} {lang === 'en' ? (sn.nameEn || sn.name) : sn.name}</span><span className="text-amber-400 font-mono">{sn.price}</span></div>{out ? <span className="text-[10px] text-rose-400 block text-center font-bold py-1">{L('نفذت ❌', 'Out ❌', lang)}</span> : <div className="flex justify-between items-center bg-neutral-950 rounded-lg p-1"><button type="button" onClick={() => setOrderQty(p => ({ ...p, [sn.id]: Math.max(0, (p[sn.id] || 0) - 1) }))} className="w-6 h-6 bg-neutral-800 rounded">-</button><span className="font-mono font-bold">{q}</span><button type="button" onClick={() => { if (q < (sn.stock ?? 0)) setOrderQty(p => ({ ...p, [sn.id]: q + 1 })); else toast(L('المتاح ', 'Max ', lang) + sn.stock, 'err'); }} className="w-6 h-6 bg-amber-500 text-black font-black rounded">+</button></div>}{q > 0 && sn.hasSugarOption && <select value={sugarPick[sn.id] || custSettings?.prefSugar || 'medium'} onChange={e => setSugarPick(p => ({ ...p, [sn.id]: e.target.value }))} className="w-full bg-neutral-950 rounded p-1 text-[10px] text-amber-200">{SUGAR_OPTIONS.map(o => <option key={o.id} value={o.id}>{lang === 'en' ? o.labelEn : o.label}</option>)}</select>}</div>; })}</div><button disabled={busy} type="button" onClick={sendSnacks} className="w-full py-2.5 bg-emerald-500 text-black font-black rounded-xl">{busy ? '⏳...' : L('إرسال طلب الكافتيريا ➔', 'Send Snacks Order →', lang)}</button></div>
+        <div className="grid grid-cols-3 gap-2"><button onClick={() => sendSvc('ac', L('الجو حر - زيادة تكييف', 'Too Hot - More AC', lang))} className="py-2 bg-neutral-950 border border-rose-500/30 text-rose-300 rounded-xl font-bold">🔥 {L('حر', 'Hot', lang)}</button><button onClick={() => sendSvc('ac', L('الجو ممتاز', 'AC Perfect', lang))} className="py-2 bg-neutral-950 border border-emerald-500/30 text-emerald-300 rounded-xl font-bold">👌 {L('مظبوط', 'OK', lang)}</button><button onClick={() => sendSvc('ac', L('الجو برد - تهدئة تكييف', 'Too Cold - Less AC', lang))} className="py-2 bg-neutral-950 border border-blue-500/30 text-blue-300 rounded-xl font-bold">🥶 {L('برد', 'Cold', lang)}</button></div>
+        {myTableReqs.length > 0 && <div className="pt-2 border-t border-neutral-800 space-y-1"><strong className="text-neutral-300 block">📡 {L('آخر طلبات هذه الشاشة:', 'Recent Table Orders:', lang)}</strong>{myTableReqs.map(r => <div key={r.id} className="p-2 bg-neutral-950 rounded-xl flex justify-between items-center text-[11px]"><span className="truncate">{r.detail}</span><span className="font-bold text-amber-400 shrink-0 mr-2">{r.status === 'done' ? L('✅ تم التسليم', '✅ Delivered', lang) : (r.status === 'rejected' ? L('❌ ملغي', '❌ Rejected', lang) : (r.prepStage === 'preparing' ? L('🔥 جاري التجهيز', '🔥 Preparing', lang) : L('⏳ وصل للكابتن', '⏳ Received', lang)))}</span></div>)}</div>}
+      </div>
+    </div>
+  );
+}
+function ReviewsPage({ reviews, currentCustomer, lang }) {
+  const { showAlert, toast } = useTwixUI(); const [tab, setTab] = useState('reviews'); const [author, setAuthor] = useState(currentCustomer?.name || ''); const [stars, setStars] = useState(5); const [comment, setComment] = useState(''); const [wish, setWish] = useState(''); const [busy, setBusy] = useState(false);
+  const addRev = (e) => { e.preventDefault(); if (busy || !comment.trim()) return; if (hasLocalProfanity(comment) || hasLocalProfanity(author)) return showAlert(L('⚠️ ألفاظ غير لائقة!', '⚠️ Inappropriate words!', lang)); setBusy(true); const id = "rev-" + Date.now(); db.collection('reviews').doc(id).set({ id, author: currentCustomer ? currentCustomer.name : (author.trim() || L('لاعب', 'Player', lang)), verified: !!currentCustomer, rating: Number(stars), comment: comment.trim(), moderated: false, date: getCairoDateStr(), createdAt: new Date().toISOString() }).then(() => { setComment(''); setBusy(false); playNotificationSound('cash'); toast(L('تم نشر التقييم!', 'Review posted!', lang)); }); };
+  const addSug = (e) => { e.preventDefault(); if (busy || !wish.trim()) return; setBusy(true); const id = "sug-" + Date.now(); db.collection('suggestions').doc(id).set({ id, author: currentCustomer?.name || author.trim() || L('لاعب', 'Player', lang), wish: wish.trim(), date: getCairoDateStr(), createdAt: new Date().toISOString() }).then(() => { setWish(''); setBusy(false); playNotificationSound('cash'); toast(L('وصل مقترحك للإدارة!', 'Sent to Management!', lang)); }); };
+  return (
+    <div className="max-w-2xl mx-auto py-6 space-y-6 text-xs">
+      <div className="flex gap-2 bg-neutral-900 p-1.5 rounded-2xl border border-neutral-800"><button onClick={() => setTab('reviews')} className={"flex-1 py-2 rounded-xl font-black " + (tab === 'reviews' ? 'bg-amber-500 text-black' : 'text-neutral-400')}>⭐ {L('تقييمات اللاعبين', 'Reviews', lang)}</button><button onClick={() => setTab('suggestions')} className={"flex-1 py-2 rounded-xl font-black " + (tab === 'suggestions' ? 'bg-amber-500 text-black' : 'text-neutral-400')}>💡 {L('صندوق المقترحات', 'Suggestions', lang)}</button></div>
+      {tab === 'reviews' ? <div className="space-y-4"><form onSubmit={addRev} className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3"><div className="grid grid-cols-2 gap-2.5"><input disabled={!!currentCustomer} value={currentCustomer ? currentCustomer.name : author} onChange={e => setAuthor(e.target.value)} placeholder={L('اسمك', 'Your Name', lang)} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><select value={stars} onChange={e => setStars(Number(e.target.value))} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-amber-400 font-bold"><option value={5}>⭐⭐⭐⭐⭐</option><option value={4}>⭐⭐⭐⭐</option><option value={3}>⭐⭐⭐</option><option value={2}>⭐⭐</option></select></div><textarea required rows={2} value={comment} onChange={e => setComment(e.target.value)} placeholder={L('اكتب تجربتك...', 'Your review...', lang)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><button disabled={busy} className="w-full py-2.5 bg-amber-500 text-black font-black rounded-xl">{L('نشر التقييم 🌟', 'Post Review 🌟', lang)}</button></form>{reviews.map(r => <div key={r.id} className="p-4 bg-neutral-900 border border-neutral-800 rounded-2xl space-y-1.5"><div className="flex justify-between"><strong className="text-white">{r.author} {r.verified && <span className="text-emerald-400 text-[10px]">✓</span>}</strong><span className="text-amber-400">{'⭐'.repeat(r.rating || 5)}</span></div><p className="text-neutral-300">{r.comment}</p>{r.adminReply && <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-xl text-[11px] text-amber-300"><strong>👑 {L('رد الإدارة:', 'Management:', lang)}</strong> {r.adminReply}</div>}</div>)}</div> : <form onSubmit={addSug} className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3"><input value={author} onChange={e => setAuthor(e.target.value)} placeholder={L('اسمك (اختياري)', 'Name (Optional)', lang)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><textarea required rows={3} value={wish} onChange={e => setWish(e.target.value)} placeholder={L('مقترحك أو فكرتك...', 'Your idea...', lang)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><button disabled={busy} className="w-full py-2.5 bg-cyan-500 text-black font-black rounded-xl">{L('إرسال للإدارة 💡', 'Send 💡', lang)}</button></form>}
+    </div>
+  );
+}
+function SettingsPage({ custSettings, setCustSettings, currentCustomer, setCurrentCustomer, config, navigate, lang }) {
+  const { showAlert, toast } = useTwixUI(); const [newPass, setNewPass] = useState(''); const [confPass, setConfPass] = useState(''); const [busy, setBusy] = useState(false);
+  const upd = (k, v) => setCustSettings(p => ({ ...p, [k]: v }));
+  const saveNewPassword = async (e) => {
+    e.preventDefault(); if (!currentCustomer || busy) return;
+    if (newPass.trim().length < 4 || newPass.trim() !== confPass.trim()) return showAlert(L('تأكد من طول وتطابق الرقم السري (4+ حروف).', 'Passwords must match (4+ chars).', lang));
+    setBusy(true); const hPass = await sha256Hex(newPass.trim()), pv = Date.now();
+    try { await db.collection('customers').doc(currentCustomer.phone).set({ password: hPass, passwordVersion: pv }, { merge: true }); safeSetStorage('twix_session_pv', String(pv)); setNewPass(''); setConfPass(''); playNotificationSound('cash'); toast(L('✓ تم تحديث الرقم السري!', '✓ Password updated!', lang)); } finally { setBusy(false); }
+  };
+  return (
+    <div className="max-w-2xl mx-auto py-6 space-y-5 text-xs">
+      <div className="flex justify-between items-center bg-neutral-900 p-4 rounded-3xl border border-neutral-800"><div><h1 className="text-xl font-black text-white">⚙️ {L('إعدادات التطبيق والحساب', 'App & Account Settings', lang)}</h1><span className="text-[11px] text-neutral-400">{config.loungeName}</span></div><button onClick={() => window.location.reload()} className="px-3.5 py-2 bg-amber-500 text-black font-black rounded-xl">🔄 {L('تحديث', 'Reload', lang)}</button></div>
+      <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3">
+        <strong className="text-amber-400 block text-sm">🌐 {L('اللغة، وضع الشاشة، والخط', 'Language, Display Mode & Font', lang)}</strong>
+        <div className="grid grid-cols-2 gap-2"><button onClick={() => upd('lang', 'ar')} className={"p-2.5 rounded-xl font-black border " + (custSettings.lang !== 'en' ? 'bg-amber-500 text-black' : 'bg-neutral-950 border-neutral-800')}>🇪🇬 العربية</button><button onClick={() => upd('lang', 'en')} className={"p-2.5 rounded-xl font-black border " + (custSettings.lang === 'en' ? 'bg-amber-500 text-black' : 'bg-neutral-950 border-neutral-800')}>🇬🇧 English</button></div>
+        <div className="grid grid-cols-3 gap-2">{[['auto', L('تلقائي', 'Auto', lang)], ['mobile', L('📱 وضع التليفون', '📱 Phone Mode', lang)], ['tablet', L('📲 وضع التابلت', '📲 Tablet Mode', lang)]].map(([id, lbl]) => <button key={id} onClick={() => upd('deviceMode', id)} className={"p-2 rounded-xl border font-bold " + ((custSettings.deviceMode || 'auto') === id ? 'bg-cyan-500 text-black' : 'bg-neutral-950 border-neutral-800')}>{lbl}</button>)}</div>
+        <div className="grid grid-cols-3 gap-2">{[['normal', L('خط: عادي', 'Font: Normal', lang)], ['large', L('خط: كبير', 'Font: Large', lang)], ['xlarge', L('خط: ممتاز', 'Font: XL', lang)]].map(([id, lbl]) => <button key={id} onClick={() => upd('fontSize', id)} className={"p-2 rounded-xl border font-bold " + ((custSettings.fontSize || 'normal') === id ? 'bg-amber-500 text-black' : 'bg-neutral-950 border-neutral-800')}>{lbl}</button>)}</div>
+        <div className="grid grid-cols-3 gap-2">{[['dark', L('داكن ذهبي', 'Gold Dark', lang)], ['midnight', L('أزرق ليلي', 'Midnight', lang)], ['oled', L('أسود نقي', 'OLED Black', lang)]].map(([id, lbl]) => <button key={id} onClick={() => upd('theme', id)} className={"p-2 rounded-xl border font-bold " + (custSettings.theme === id ? 'bg-amber-500 text-black' : 'bg-neutral-950 border-neutral-800')}>{lbl}</button>)}</div>
+        <div className="grid grid-cols-2 gap-2"><button onClick={() => upd('soundEnabled', custSettings.soundEnabled === false)} className="p-2 bg-neutral-950 border border-neutral-800 rounded-xl font-bold">{custSettings.soundEnabled === false ? L('الصوت: مكتوم 🔇', 'Sound: Muted 🔇', lang) : L('الصوت: شغال 🔊', 'Sound: On 🔊', lang)}</button><button onClick={() => upd('reduceMotion', !custSettings.reduceMotion)} className="p-2 bg-neutral-950 border border-neutral-800 rounded-xl font-bold">{custSettings.reduceMotion ? L('تأثيرات الحركة: هادئة', 'Motion: Reduced', lang) : L('تأثيرات الحركة: كاملة', 'Motion: Full', lang)}</button></div>
+        <div className="grid grid-cols-2 gap-2 items-center"><span className="font-bold">⏰ {L('تنبيه قبل انتهاء الوقت:', 'End-Time Reminder:', lang)}</span><select value={custSettings.alertMinutes || 10} onChange={e => upd('alertMinutes', Number(e.target.value))} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-amber-400 font-bold"><option value={5}>{L('5 دقائق', '5 Mins', lang)}</option><option value={10}>{L('10 دقائق', '10 Mins', lang)}</option><option value={15}>{L('15 دقيقة', '15 Mins', lang)}</option></select></div>
+      </div>
+      <div className="bg-neutral-900 border border-purple-500/30 p-5 rounded-3xl space-y-2.5"><strong className="text-purple-300 block text-sm">🔒 {L('إعدادات الخصوصية (نظام واتساب)', 'WhatsApp Privacy Controls', lang)}</strong><label className="flex items-center justify-between p-2.5 bg-neutral-950 rounded-2xl border border-neutral-800 cursor-pointer"><span>{L('تأكيد قراءة الرسائل والستوري (Seen) في الشلة', 'Squad Read Receipts (Seen)', lang)}</span><input type="checkbox" checked={!custSettings.hideSeen} onChange={e => upd('hideSeen', !e.target.checked)} /></label><label className="flex items-center justify-between p-2.5 bg-neutral-950 rounded-2xl border border-neutral-800 cursor-pointer"><span>{L('إظهار حالتي "متصل الآن" في الشلة', 'Show "Online" status in Squad', lang)}</span><input type="checkbox" checked={!custSettings.hideOnline} onChange={e => upd('hideOnline', !e.target.checked)} /></label><span className="text-[10px] text-neutral-400 block">{L('• إذا أقفلت Seen فلن يظهر لأصدقائك أنك شاهدت رسائلهم أو ستوريهاتهم، وبالمقابل لن ترى من شاهد رسائلك في الشلة.', '• Disabling Seen hides your views from friends and hides who viewed yours in Squad.', lang)}</span></div>
+      <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3"><strong className="text-cyan-400 block text-sm">🎮 {L('تفضيلات الحجز واللقب', 'Booking & Table Preferences', lang)}</strong><div className="grid grid-cols-2 gap-2"><select value={custSettings.prefDevice || 'PS5'} onChange={e => upd('prefDevice', e.target.value)} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white font-bold"><option value="PS5">PS5 VIP</option><option value="PS4">PS4 Pro</option></select><select value={custSettings.prefMode || 'single'} onChange={e => upd('prefMode', e.target.value)} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-amber-300 font-bold"><option value="single">{L('فردي', 'Solo', lang)}</option><option value="multi">{L('ملتي', 'Multi', lang)}</option></select></div><div className="grid grid-cols-2 gap-2"><input value={custSettings.prefGame || ''} onChange={e => upd('prefGame', e.target.value)} placeholder={L('لعبتك المفضلة', 'Favorite Game', lang)} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white" /><select value={custSettings.prefSugar || 'medium'} onChange={e => upd('prefSugar', e.target.value)} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-amber-200">{SUGAR_OPTIONS.map(o => <option key={o.id} value={o.id}>{lang === 'en' ? o.labelEn : o.label}</option>)}</select></div><div className="flex gap-2 items-center"><label className="flex items-center gap-1"><input type="checkbox" checked={!!custSettings.useNickname} onChange={e => upd('useNickname', e.target.checked)} /> {L('لقب بالطاولة:', 'Nickname:', lang)}</label><input value={custSettings.nickname || ''} onChange={e => upd('nickname', e.target.value)} placeholder={L('لقبك', 'Your nickname', lang)} className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white" /></div></div>
+      {currentCustomer ? <div className="bg-neutral-900 border border-amber-500/30 p-5 rounded-3xl space-y-3"><strong className="text-amber-400 block text-sm">👤 {L('الصورة الشخصية والرقم السري', 'Avatar & Password', lang)}</strong><FilePickerButton onPick={async b64 => { await db.collection('customers').doc(currentCustomer.phone).set({ avatarUrl: b64 }, { merge: true }); setCurrentCustomer(p => ({ ...p, avatarUrl: b64 })); toast('✓'); }} label={L('🖼️ تغيير الصورة الشخصية', '🖼️ Change Avatar', lang)} /><form onSubmit={saveNewPassword} className="space-y-2"><div className="grid grid-cols-2 gap-2"><input required type="password" value={newPass} onChange={e => setNewPass(e.target.value)} placeholder={L('الرقم السري الجديد', 'New Password', lang)} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white" /><input required type="password" value={confPass} onChange={e => setConfPass(e.target.value)} placeholder={L('تأكيد الرقم السري', 'Confirm Password', lang)} className="bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white" /></div><button disabled={busy} className="w-full py-2.5 bg-amber-500 text-black font-black rounded-xl">{L('حفظ الرقم السري ✓', 'Save Password ✓', lang)}</button></form></div> : <div className="p-4 bg-neutral-900 border border-neutral-800 rounded-3xl text-center"><button onClick={() => navigate('account')} className="px-4 py-2 bg-amber-500 text-black font-black rounded-xl">{L('تسجيل الدخول', 'Sign In', lang)}</button></div>}
+    </div>
+  );
+    }
     
