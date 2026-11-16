@@ -1584,4 +1584,284 @@ function SettingsPage({ custSettings, setCustSettings, currentCustomer, setCurre
     </div>
   );
     }
-    
+    function AccountAuthView({ config, setCurrentCustomer, navigate, lang }) {
+  const { showAlert, toast } = useTwixUI();
+  const [isSignup, setIsSignup] = useState(false); const [isPending, setIsPending] = useState(false);
+  const [loginPhone, setLoginPhone] = useState(''); const [loginPass, setLoginPass] = useState('');
+  const [signupName, setSignupName] = useState(''); const [signupPhone, setSignupPhone] = useState('');
+  const [signupWa, setSignupWa] = useState(''); const [sameWa, setSameWa] = useState(true);
+  const [signupPass, setSignupPass] = useState(''); const [signupBirth, setSignupBirth] = useState('');
+  const [signupIdCard, setSignupIdCard] = useState(null); const [signupRef, setSignupRef] = useState(() => localStorage.getItem('twix_pending_ref_param') || '');
+  const [guestPhone, setGuestPhone] = useState(''); const [guestBookings, setGuestBookings] = useState(null); const [busy, setBusy] = useState(false);
+  const handleLogin = async (e) => {
+    e.preventDefault(); if (!validateEgyptianPhone(loginPhone)) return showAlert(L('رقم هاتف مصري غير صحيح.', 'Invalid Egyptian phone.', lang));
+    const doc = await db.collection('customers').doc(loginPhone.trim()).get(); if (!doc.exists) return showAlert(L('الرقم غير مسجل!', 'Phone not registered!', lang));
+    const c = doc.data();
+    if (c.status === 'banned') return showAlert(L('⚠️ الحساب محظور: ', '⚠️ Account Banned: ', lang) + (c.banReason || L('مخالفة اللوائح', 'Policy violation', lang)));
+    if (c.status === 'pending_approval') { setIsPending(true); return; }
+    if (c.password) {
+      if (!(await verifyStoredHash(loginPass.trim(), c.password))) return showAlert(L('الرقم السري غير صحيح!', 'Wrong password!', lang));
+      if (!String(c.password).startsWith('sha256:')) { const np = await sha256Hex(loginPass.trim()); await db.collection('customers').doc(c.phone).set({ password: np }, { merge: true }); }
+    }
+    const pv = Number(c.passwordVersion || 1); safeSetStorage('twix_session_pv', String(pv));
+    setCurrentCustomer(c); playNotificationSound('cash'); toast(L('تم تسجيل الدخول!', 'Signed in!', lang));
+  };
+  const handleSignup = async (e) => {
+    e.preventDefault(); if (busy) return;
+    const nm = signupName.trim(), ph = signupPhone.trim(), wa = (sameWa ? ph : signupWa.trim());
+    if (nm.split(/\s+/).length < 2) return showAlert(L('اكتب الاسم ثنائياً.', 'Enter full name.', lang));
+    if (!validateEgyptianPhone(ph)) return showAlert(L('رقم الاتصال غير صحيح (11 رقم).', 'Invalid calling phone (11 digits).', lang));
+    if (!validateEgyptianPhone(wa)) return showAlert(L('رقم الواتساب غير صحيح (11 رقم).', 'Invalid WhatsApp number (11 digits).', lang));
+    if (signupPass.trim().length < 4) return showAlert(L('الرقم السري لا يقل عن 4 حروف.', 'Password must be 4+ chars.', lang));
+    if (signupBirth && !signupIdCard) return showAlert(L('لتفعيل هدية عيد الميلاد، أرفق صورة البطاقة أو شهادة الميلاد.', 'Attach ID/Birth cert for birthday verification.', lang));
+    setBusy(true);
+    try {
+      const existsDoc = await db.collection('customers').doc(ph).get(); if (existsDoc.exists) { setBusy(false); return showAlert(L('هذا الرقم مسجل بالفعل!', 'Phone already registered!', lang)); }
+      const { fp, hw } = getDeviceFingerprint(), wl = config.whitelistedDevices || [];
+      if (!wl.includes(hw) && !wl.includes(fp)) {
+        const [q1, q2] = await Promise.all([db.collection('customers').where('deviceFingerprintHW', '==', hw).get(), db.collection('customers').where('deviceFingerprint', '==', fp).get()]);
+        const uniq = new Set([...q1.docs.map(d => d.id), ...q2.docs.map(d => d.id)]);
+        const localCnt = Number(localStorage.getItem('twix_dev_signups') || 0);
+        if (uniq.size >= 2 || localCnt >= 2) { setBusy(false); return showAlert(L('⚠️ الحد الأقصى هو حسابين فقط على نفس الجهاز! تواصل مع الإدارة للاستثناء.', '⚠️ Max 2 accounts allowed per device! Contact Management.', lang)); }
+      }
+      const idMed = signupIdCard ? await saveMediaDoc(signupIdCard, "ID-" + ph, 'id_card') : { mediaId: null };
+      const refCode = signupRef.trim().toUpperCase(), validRef = refCode && refCode !== ("TX-" + ph.slice(-4)) ? refCode : '';
+      const hPass = await sha256Hex(signupPass.trim()), pv = Date.now();
+      await db.collection('customers').doc(ph).set({ name: nm, phone: ph, whatsappPhone: wa, password: hPass, passwordVersion: pv, birthDate: signupBirth || '', idCardMediaId: idMed.mediaId, birthVerified: false, birthDocPending: !!(signupBirth && signupIdCard), avatarUrl: null, walletBalance: 0, walletHistory: [], notifications: [], prepaidHours: 0, prepaidPS5Hours: 0, prepaidPS4Hours: 0, xp: 50, monthlyXP: 50, monthKey: getCairoMonthKey(), hoursPlayed: 0, hoursClaimed24h: 0, totalSpent: 0, claimedMissions: [], incidents: [], trustAdjustments: [], usedPromos: [], pendingReferralCode: validRef, referralPaid: false, myReferralCode: "TX-" + ph.slice(-4), trustScore: 85, trustLabel: 'جيد 👍', deviceFingerprint: fp, deviceFingerprintHW: hw, status: 'pending_approval', createdAt: new Date().toISOString() });
+      safeSetStorage('twix_dev_signups', String(Number(localStorage.getItem('twix_dev_signups') || 0) + 1));
+      safeSetStorage('twix_session_pv', String(pv)); logSystemEvent(nm, 'NEW_SIGNUP', "حساب جديد (" + ph + ")"); setIsPending(true); playNotificationSound('cash');
+    } finally { setBusy(false); }
+  };
+  if (isPending) return <div className="max-w-md mx-auto py-12 text-center space-y-4 text-xs"><div className="text-4xl">⏳</div><h2 className="text-xl font-black text-white">{L('حسابك قيد المراجعة والتفعيل', 'Account Pending Approval', lang)}</h2><p className="text-neutral-300 bg-neutral-900 p-4 rounded-2xl border border-neutral-800">{L('يتم مراجعة حسابك من الإدارة وسيتفعل قريباً.', 'Management is reviewing your account.', lang)}</p><button onClick={() => { setIsPending(false); navigate('home'); }} className="px-6 py-2.5 bg-amber-500 text-black font-black rounded-xl">{L('الرئيسية', 'Home', lang)}</button></div>;
+  return (
+    <div className="max-w-md mx-auto py-8 space-y-5 text-xs">
+      <div className="bg-neutral-900 border border-neutral-800 p-6 rounded-3xl space-y-4">
+        <div className="flex bg-neutral-950 p-1 rounded-2xl border border-neutral-800"><button onClick={() => setIsSignup(false)} className={"flex-1 py-2 rounded-xl font-black " + (!isSignup ? 'bg-amber-500 text-black' : 'text-neutral-400')}>{L('دخول', 'Sign In', lang)}</button><button onClick={() => setIsSignup(true)} className={"flex-1 py-2 rounded-xl font-black " + (isSignup ? 'bg-amber-500 text-black' : 'text-neutral-400')}>{L('حساب جديد', 'Sign Up', lang)}</button></div>
+        {!isSignup ? <form onSubmit={handleLogin} className="space-y-3"><input required type="tel" value={loginPhone} onChange={e => setLoginPhone(e.target.value)} placeholder={L('رقم الموبايل (01xxxxxxxxx)', 'Phone (01xxxxxxxxx)', lang)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white font-mono text-left" /><input required type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder={L('الرقم السري', 'Password', lang)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><div className="flex justify-between items-center text-[10px] text-neutral-400"><span>🔑 {L('نسيت الرقم السري؟', 'Forgot password?', lang)}</span><a href={"https://wa.me/" + formatWhatsAppNum(config.whatsappNumber) + "?text=" + encodeURIComponent(L("السلام عليكم إدارة " + config.loungeName + "، نسيت الرقم السري لحسابي رقم: " + (loginPhone || ''), "Hello Management, I forgot password for account: " + (loginPhone || ''), lang))} target="_blank" rel="noopener noreferrer" className="text-emerald-400 underline font-bold">{L('واتساب الإدارة', 'WhatsApp Admin', lang)}</a></div><button className="w-full py-3 bg-amber-500 text-black font-black rounded-xl">{L('دخول ➔', 'Sign In →', lang)}</button></form> : <form onSubmit={handleSignup} className="space-y-3"><input required value={signupName} onChange={e => setSignupName(e.target.value)} placeholder={L('الاسم واسم الأب ثنائي', 'Full Name (2+ words)', lang)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><div><label className="text-[10px] text-neutral-400 block mb-1">📞 {L('رقم الهاتف للاتصال:', 'Calling Phone:', lang)}</label><input required type="tel" value={signupPhone} onChange={e => setSignupPhone(e.target.value)} placeholder="01xxxxxxxxx" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white font-mono text-left" /></div><div className="p-2.5 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-1.5"><div className="flex justify-between items-center"><span className="text-[10px] text-emerald-400 font-bold">💬 {L('رقم الواتساب للتواصل:', 'WhatsApp Number:', lang)}</span><label className="text-[10px] flex items-center gap-1 cursor-pointer"><input type="checkbox" checked={sameWa} onChange={e => setSameWa(e.target.checked)} /> {L('نفس رقم الاتصال', 'Same as calling', lang)}</label></div>{!sameWa && <input required type="tel" value={signupWa} onChange={e => setSignupWa(e.target.value)} placeholder="01xxxxxxxxx" className="w-full bg-neutral-900 border border-neutral-800 rounded-xl p-2 text-white font-mono text-left" />}</div><input required type="password" value={signupPass} onChange={e => setSignupPass(e.target.value)} placeholder={L('الرقم السري (4+ حروف)', 'Password (4+ chars)', lang)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><div className="p-2.5 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-2"><span className="text-[10px] text-pink-300 font-bold block">🎂 {L('هدية عيد الميلاد (اختياري): تاريخ الميلاد والبطاقة', 'Birthday Gift (Optional): Birth Date & ID', lang)}</span><div className="grid grid-cols-2 gap-2 items-end"><div><span className="text-[9px] text-neutral-400 block mb-0.5">{L('تاريخ الميلاد:', 'Birth Date:', lang)}</span><input type="date" value={signupBirth} onChange={e => setSignupBirth(e.target.value)} className="w-full bg-neutral-900 border border-neutral-800 rounded-xl p-2 text-white font-mono text-[10px]" /></div><FilePickerButton onPick={setSignupIdCard} label={signupIdCard ? '✓ ' + L('تمت الصورة', 'Attached', lang) : '🪪 ' + L('البطاقة/الشهادة', 'ID / Cert', lang)} className="bg-neutral-900 p-2 rounded-xl border border-neutral-800 text-[10px] text-amber-300 font-bold" /></div></div><input value={signupRef} onChange={e => setSignupRef(e.target.value)} placeholder={L('كود الإحالة (اختياري)', 'Referral Code (Optional)', lang)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-amber-300 font-mono uppercase" /><button disabled={busy} className="w-full py-3 bg-amber-500 text-black font-black rounded-xl">{busy ? '⏳...' : L('إرسال طلب التسجيل ➔', 'Submit Signup →', lang)}</button></form>}
+      </div>
+      <form onSubmit={async e => { e.preventDefault(); if (!validateEgyptianPhone(guestPhone)) return showAlert(L('رقم غير صحيح.', 'Invalid phone.', lang)); const s = await db.collection('bookings').where('phone', '==', guestPhone.trim()).get(); const l = []; s.forEach(d => l.push(d.data())); l.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')); setGuestBookings(l); }} className="bg-neutral-900 border border-neutral-800 p-4 rounded-3xl space-y-2"><strong className="text-amber-400 block">🔍 {L('متابعة حجز بدون حساب:', 'Track Guest Booking:', lang)}</strong><div className="flex gap-2"><input value={guestPhone} onChange={e => setGuestPhone(e.target.value)} placeholder="01xxxxxxxxx" className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl p-2 text-white font-mono text-left" /><button className="px-3 bg-neutral-800 rounded-xl font-bold">{L('بحث', 'Find', lang)}</button></div>{guestBookings && (guestBookings.length === 0 ? <p className="text-neutral-500">{L('لا توجد حجوزات.', 'No bookings found.', lang)}</p> : guestBookings.slice(0, 4).map(b => <div key={b.id} className="p-2 bg-neutral-950 rounded-xl flex justify-between"><span>{b.ref} ({b.date} {formatTime12(b.time, lang)})</span><strong className="text-amber-400">{trStatus(b.status, lang)}</strong></div>))}</form>
+    </div>
+  );
+    }
+    function AccountAchievementsBox({ currentCustomer, bookings, missions, config, lang }) {
+  const { showAlert, toast } = useTwixUI(); const [inStoreSales, setInStoreSales] = useState([]); const [busyId, setBusyId] = useState('');
+  useEffect(() => {
+    if (!currentCustomer?.phone) return;
+    return db.collection('sales').where('customerPhone', '==', currentCustomer.phone).onSnapshot(s => { const l = []; s.forEach(d => l.push(d.data())); setInStoreSales(l); }, () => {});
+  }, [currentCustomer?.phone]);
+  const doneBks = bookings.filter(b => b.status === 'confirmed' && !b.isPackOrder && (b.checkedIn || b.timerStatus === 'finished'));
+  const stats = { hours_ps5: 0, hours_ps4: 0, multi_total: 0, snacks_total: 0 };
+  doneBks.forEach(b => {
+    const devs = b.bookedDevices || [{ type: (b.devicesSummary || '').includes('PS5') ? 'PS5' : 'PS4', mode: (b.devicesSummary || '').includes('ملتي') ? 'multi' : 'single', duration: b.duration }];
+    devs.forEach(d => { const h = Number(d.duration || 30) / 60; if (d.type === 'PS5') stats.hours_ps5 += h; else stats.hours_ps4 += h; if (d.mode === 'multi') stats.multi_total += 1; });
+    if (Number(b.totalSnacksCost || 0) > 0) stats.snacks_total += 1;
+  });
+  inStoreSales.forEach(sl => {
+    const h = Number(sl.durationMins || 0) / 60;
+    if ((sl.devName || '').includes('PS5') || (sl.devName || '').includes('5')) stats.hours_ps5 += h; else if ((sl.devName || '').includes('PS4') || (sl.devName || '').includes('4')) stats.hours_ps4 += h;
+    if ((sl.snackItems || []).length > 0) stats.snacks_total += 1;
+  });
+  const curLvl = calculateInfiniteLevel(currentCustomer.xp || 50, currentCustomer.hoursPlayed || 0, lang).level;
+  const evalTier = (m) => {
+    const step = Math.max(1, Number(m.step || m.target || 1));
+    const claimed = (currentCustomer.claimedMissions || []).filter(k => k.startsWith(m.id + "@t")).length;
+    const tier = claimed + 1, goal = tier * step, val = m.metric === 'level_step' ? curLvl : Number((stats[m.metric] || 0).toFixed(2));
+    const prevBase = (tier - 1) * step, pct = Math.max(0, Math.min(100, Math.round(((val - prevBase) / step) * 100)));
+    return { tier, key: m.id + "@t" + tier, goal, val: Math.min(val, goal), rawVal: val, pct, ready: val >= goal };
+  };
+  const verifyAndClaim = async (m, info) => {
+    if (busyId) return; setBusyId(m.id);
+    try {
+      const reward = Math.min(10, Number(m.giftAmount ?? config.rewardsConfig?.achievementPerTier ?? 3));
+      let aiOk = true;
+      try {
+        const res = await fetch(AI_WORKER_URL + "/verify-achievement", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: currentCustomer.phone, missionId: m.id, tier: info.tier, metric: m.metric, verifiedValue: info.rawVal, requiredGoal: info.goal, reward }) });
+        if (res.ok) { const d = await res.json(); if (d && d.approved === false) aiOk = false; }
+      } catch {}
+      if (!aiOk) return showAlert(L('⚠️ لم يعتمد AI الإنجاز بعد — أكمل الجلسات الفعلية أولاً.', '⚠️ AI audit could not verify completed sessions yet.', lang));
+      const cRef = db.collection('customers').doc(currentCustomer.phone);
+      const ok = await db.runTransaction(async tx => {
+        const s = await tx.get(cRef), d = s.data() || {}, list = d.claimedMissions || [];
+        if (list.includes(info.key)) return false;
+        const upd = { claimedMissions: [...list, info.key], xp: Number(d.xp || 50) + Number(m.xpReward || 40) };
+        if (reward > 0) {
+          upd.walletBalance = Number(d.walletBalance || 0) + reward;
+          upd.walletHistory = [{ id: "tx-" + Date.now(), delta: reward, reason: "مكافأة إنجاز (" + m.title + " T" + info.tier + ") [AI]", date: getCairoDateStr(), time: getCairoTimeStr() }, ...(d.walletHistory || [])].slice(0, 50);
+          upd.notifications = [{ id: "nf-" + Date.now(), title: L("🤖 تم اعتماد إنجازك +", "🤖 Achievement Verified +", lang) + reward + L("ج", " EGP", lang), body: (lang === 'en' ? (m.titleEn || m.title) : m.title) + " #" + info.tier, read: false, date: getCairoDateStr(), time: getCairoTimeStr() }, ...(d.notifications || [])].slice(0, 35);
+        }
+        tx.update(cRef, upd); return true;
+      });
+      if (ok) {
+        await updatePublicRankXP(currentCustomer.phone, currentCustomer.name, Number(m.xpReward || 40));
+        logSystemEvent('AI الإنجازات', 'ACHIEVEMENT_GRANT', currentCustomer.phone + ": " + m.id + " T" + info.tier + " (+" + reward + "ج)");
+        playNotificationSound('cash'); toast(L("🎉 مبروك! تم إضافة +" + reward + "ج لمحفظتك وفتح المستوى #" + (info.tier + 1), "🎉 +" + reward + " EGP added & Tier #" + (info.tier + 1) + " unlocked!", lang));
+      }
+    } finally { setBusyId(''); }
+  };
+  return (
+    <div className="bg-neutral-900 border border-amber-500/30 p-5 rounded-3xl space-y-3"><h3 className="font-black text-amber-400 text-sm">🎯 {L('الإنجازات اللانهائية (1←∞) بتدقيق الـ AI:', 'Infinite Achievements (1→∞) AI-Verified:', lang)}</h3><div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">{(missions || []).filter(m => m.active !== false).map(m => { const inf = evalTier(m); return (<div key={m.id} className={"p-3 rounded-2xl border space-y-2 " + (inf.ready ? 'bg-amber-500/15 border-amber-500' : 'bg-neutral-950 border-neutral-800')}><div className="flex justify-between items-start gap-2"><div><strong className="text-white block">{lang === 'en' ? (m.titleEn || m.title) : m.title} <span className="text-amber-400 font-mono">#{inf.tier}</span></strong><span className="text-[10px] text-neutral-400 block">{lang === 'en' ? (m.descEn || m.desc) : m.desc}</span></div><span className="text-[10px] font-mono text-cyan-300 font-bold shrink-0">{inf.val}/{inf.goal}</span></div><div className="w-full h-2 bg-neutral-900 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-amber-500 to-emerald-400" style={{ width: inf.pct + "%" }} /></div><div className="flex justify-between items-center text-[10px]"><span className="text-emerald-400 font-bold">+{m.xpReward} XP • +{Math.min(10, Number(m.giftAmount ?? config.rewardsConfig?.achievementPerTier ?? 3))} {L('ج', 'EGP', lang)}</span>{inf.ready ? <button disabled={busyId === m.id} onClick={() => verifyAndClaim(m, inf)} className="px-3 py-1 bg-amber-500 text-black font-black rounded-xl">{busyId === m.id ? '⏳' : L('استلام بالتدقيق 🤖', 'Claim (AI) 🤖', lang)}</button> : <span className="text-neutral-500 font-mono">{inf.pct}%</span>}</div></div>); })}</div></div>
+  );
+}
+async function executeCustomerCancellation({ b, config, lang }) {
+  const cutoffMins = Number(config.autoCancelMinutes || 60), slotMs = parseCairoSlotMs(b.date, b.time), minsLeft = Math.floor((slotMs - Date.now()) / 60000);
+  const walPaid = Number(b.walletDeduction || 0), extPaid = Number(b.remainingCashToTransfer || 0), ps5H = Number(b.prepaidPS5Deducted || 0), ps4H = Number(b.prepaidPS4Deducted || 0);
+  const isPureInternal = extPaid <= 0 && (walPaid > 0 || ps5H > 0 || ps4H > 0 || b.prepaidHoursDeducted > 0);
+  const canAutoWal = b.status === 'awaiting_admin_approval' || (isPureInternal && minsLeft >= cutoffMins) || (b.paymentMethod === 'hybrid' && minsLeft >= cutoffMins);
+  let refundedWal = 0;
+  if (canAutoWal && (walPaid > 0 || ps5H > 0 || ps4H > 0 || b.prepaidHoursDeducted > 0) && b.phone) {
+    await db.runTransaction(async tx => {
+      const ref = db.collection('customers').doc(b.phone), cs = await tx.get(ref); if (!cs.exists) return; const d = cs.data(), u = {};
+      if (walPaid > 0) { u.walletBalance = Number(d.walletBalance || 0) + walPaid; refundedWal = walPaid; u.walletHistory = [{ id: "tx-" + Date.now(), delta: walPaid, reason: "استرداد إلغاء حجز " + b.ref, date: getCairoDateStr(), time: getCairoTimeStr() }, ...(d.walletHistory || [])].slice(0, 50); }
+      if (ps5H > 0) u.prepaidPS5Hours = Number((Number(d.prepaidPS5Hours ?? (d.prepaidDeviceType === 'PS5' ? d.prepaidHours : 0)) + ps5H).toFixed(2));
+      if (ps4H > 0) u.prepaidPS4Hours = Number((Number(d.prepaidPS4Hours ?? (d.prepaidDeviceType === 'PS4' ? d.prepaidHours : 0)) + ps4H).toFixed(2));
+      if (b.promoCodeUsed) u.usedPromos = (d.usedPromos || []).filter(p => p !== b.promoCodeUsed);
+      tx.update(ref, u);
+    });
+  }
+  if (canAutoWal && isPureInternal) {
+    if (b.selectedSnacks) { const rev = {}; Object.entries(b.selectedSnacks).forEach(([k, q]) => { if (q > 0) rev[k] = Number(q); }); await atomicAdjustSnackStock(rev).catch(() => {}); }
+    if (b.couponId && b.phone) await db.collection('coupons').doc(b.couponId).update({ usedBy: firebase.firestore.FieldValue.arrayRemove(b.phone) }).catch(() => {});
+    await db.collection('bookings').doc(b.id).update({ status: 'cancelled_auto', timerStatus: 'finished', walletRefundedOnCancel: refundedWal, cancelNote: L("تم استرجاع " + refundedWal + "ج في رصيدك بالبرنامج", "Refunded " + refundedWal + " EGP to App Wallet", lang) });
+    logSystemEvent(b.customerName, 'AUTO_CANCEL_REFUND', b.ref + " (رد " + refundedWal + "ج للمحفظة)");
+    return { autoDone: true, refundedWal, extPending: 0 };
+  }
+  await db.collection('bookings').doc(b.id).update({ status: 'pending_cancel_approval', walletRefundedOnCancel: refundedWal, extRefundPending: extPaid, cancelRequestedAt: new Date().toISOString(), cancelNote: (refundedWal > 0 ? (L("تم استرجاع " + refundedWal + "ج في رصيدك داخل البرنامج • ", "Refunded " + refundedWal + " EGP to App Wallet • ", lang)) : '') + (extPaid > 0 ? (L("المتبقي لك " + extPaid + "ج (تحويل خارجي) — تواصل مع المدير عبر الشات أو الواتساب", "Remaining " + extPaid + " EGP (E-Wallet) — Contact Manager via Chat/WhatsApp", lang)) : L("طلب إلغاء قيد مراجعة المدير", "Cancel awaiting Admin approval", lang)) });
+  logSystemEvent(b.customerName, 'CANCEL_REQUEST_ADMIN', b.ref + " | رد محفظة: " + refundedWal + "ج | معلق خارجي: " + extPaid + "ج");
+  return { autoDone: false, refundedWal, extPending: extPaid };
+  }
+    function AccountPage({ config, currentCustomer, setCurrentCustomer, bookings, gifts, missions, navigate, now, handleRequestSmartExtension, handleEmergencyCancel, setOnTheWayTarget, setBookingQRTarget, lang, initialTab = 'bookings', chatInitDraft = '', onClearChatDraft }) {
+  const { showAlert, showConfirm, toast } = useTwixUI();
+  const [tab, setTab] = useState(initialTab); const [showTopup, setShowTopup] = useState(false); const [topAmt, setTopAmt] = useState(50);
+  const [topPh, setTopPh] = useState(''); const [topNm, setTopNm] = useState(''); const [topRec, setTopRec] = useState(null);
+  const [showEdit, setShowEdit] = useState(false); const [edName, setEdName] = useState(''); const [edWa, setEdWa] = useState(''); const [edPass, setEdPass] = useState(''); const [edAva, setEdAva] = useState(null); const [edBirth, setEdBirth] = useState(''); const [edIdDoc, setEdIdDoc] = useState(null);
+  const [chatDraft, setChatDraft] = useState(chatInitDraft || ''); const [busy, setBusy] = useState(false);
+  useEffect(() => { if (initialTab) setTab(initialTab); }, [initialTab]);
+  useEffect(() => { if (chatInitDraft) { setChatDraft(chatInitDraft); setTab('chat'); onClearChatDraft && onClearChatDraft(); } }, [chatInitDraft]);
+  if (!currentCustomer) return <AccountAuthView config={config} setCurrentCustomer={setCurrentCustomer} navigate={navigate} lang={lang} />;
+  const walletMap = [{ id: 'vodafone', name: L('فودافون كاش', 'Vodafone Cash', lang), num: config.wallets?.vodafone || config.phone }, { id: 'instapay', name: 'InstaPay', num: config.wallets?.instapay }, { id: 'orange', name: 'Orange', num: config.wallets?.orange }, { id: 'etisalat', name: 'Etisalat', num: config.wallets?.etisalat }, { id: 'wepay', name: 'WE Pay', num: config.wallets?.wepay }].filter(w => (w.num || '').trim());
+  const lvl = calculateInfiniteLevel(currentCustomer.xp || 50, currentCustomer.hoursPlayed || 0, lang);
+  const trust = computeTrustScore(currentCustomer, bookings, now);
+  const ps5H = Number(currentCustomer.prepaidPS5Hours ?? (currentCustomer.prepaidDeviceType === 'PS5' ? currentCustomer.prepaidHours : 0) ?? 0);
+  const ps4H = Number(currentCustomer.prepaidPS4Hours ?? (currentCustomer.prepaidDeviceType === 'PS4' ? currentCustomer.prepaidHours : 0) ?? 0);
+  const m24Amt = Number(config.rewardsConfig?.milestone24h ?? 35), refAmt = Number(config.rewardsConfig?.referral ?? 5);
+  const eligible24 = Math.max(0, Number(currentCustomer.hoursPlayed || 0) - Number(currentCustomer.hoursClaimed24h || 0));
+  const onCancelClick = async (b) => {
+    if (busy) return;
+    if (!(await showConfirm(L("تأكيد إلغاء الحجز (" + b.ref + ")؟", "Confirm cancelling booking (" + b.ref + ")?", lang), '', true))) return;
+    setBusy(true);
+    try {
+      const r = await executeCustomerCancellation({ b, config, lang });
+      playNotificationSound('cash');
+      const msg = (r.refundedWal > 0 ? (L("✅ تم استرجاع " + r.refundedWal + " ج في رصيدك بالبرنامج.\n", "✅ Refunded " + r.refundedWal + " EGP to App Wallet.\n", lang)) : '') + (r.extPending > 0 ? (L("⚠️ المتبقي لك " + r.extPending + " ج (تحويل خارجي) — تواصل مع المدير عبر الشات أو الواتساب الآن!", "⚠️ Remaining " + r.extPending + " EGP (e-wallet) — contact Manager via Chat or WhatsApp!", lang)) : (r.autoDone ? L('تم الإلغاء بنجاح.', 'Cancelled cleanly.', lang) : L('تم إرسال طلب الإلغاء لموافقة المدير.', 'Cancel request sent for Admin review.', lang)));
+      showAlert(msg, L('حالة الإلغاء والاسترداد', 'Cancellation & Refund Status', lang));
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="max-w-4xl mx-auto py-6 space-y-5 text-xs">
+      <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-4"><div className="w-16 h-16 rounded-2xl bg-amber-500/20 border-2 border-amber-500/40 flex items-center justify-center text-3xl overflow-hidden">{currentCustomer.avatarUrl ? <img src={currentCustomer.avatarUrl} className="w-full h-full object-cover" /> : lvl.badge}</div><div><h2 className="text-lg font-black text-white">{currentCustomer.name}</h2><span className="text-neutral-400 font-mono block">📞 {currentCustomer.phone} | 💬 {currentCustomer.whatsappPhone || currentCustomer.phone}</span><div className="flex flex-wrap gap-1.5 mt-1"><span className={"px-2.5 py-0.5 rounded-full font-black text-[10px] bg-black/60 border border-neutral-800 " + lvl.color}>Lvl {lvl.level} — {lvl.title} ({currentCustomer.xp || 50} XP)</span><span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-amber-500 text-black font-mono">💰 {currentCustomer.walletBalance || 0} {L('ج', 'EGP', lang)}</span>{ps5H > 0 && <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-purple-600 text-white font-mono">PS5: {ps5H}h</span>}{ps4H > 0 && <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-cyan-600 text-black font-mono">PS4: {ps4H}h</span>}<span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-neutral-950 border border-neutral-800 text-emerald-400">{L('التزام:', 'Trust:', lang)} {trust.score}%</span></div></div></div>
+        <div className="flex flex-wrap gap-1.5"><button onClick={() => setShowTopup(true)} className="px-3 py-2 bg-emerald-500 text-black font-black rounded-xl">➕ {L('شحن', 'Topup', lang)}</button><button onClick={() => { setEdName(currentCustomer.name); setEdWa(currentCustomer.whatsappPhone || currentCustomer.phone); setEdPass(''); setEdBirth(currentCustomer.birthDate || ''); setEdAva(null); setEdIdDoc(null); setShowEdit(true); }} className="px-3 py-2 bg-neutral-800 text-amber-300 rounded-xl font-bold">✏️ {L('بياناتي', 'Profile', lang)}</button><button onClick={() => { setCurrentCustomer(null); navigate('home'); }} className="px-3 py-2 bg-neutral-950 text-neutral-400 rounded-xl border border-neutral-800">{L('خروج', 'Logout', lang)}</button></div>
+      </div>
+      <div className="flex gap-1.5 overflow-x-auto no-scrollbar bg-neutral-900 p-1.5 rounded-2xl border border-neutral-800">{[['bookings', L('📅 حجوزاتي', '📅 Bookings', lang) + " (" + bookings.length + ")"], ['missions', L('🎯 الإنجازات والهدايا', '🎯 Achievements', lang)], ['chat', L('💬 شات المدير المباشر', '💬 Chat Manager', lang)], ['ledger', L('📜 كشف الحساب', '📜 Wallet Log', lang)]].map(([id, l]) => <button key={id} onClick={() => setTab(id)} className={"px-3.5 py-2 rounded-xl font-black shrink-0 " + (tab === id ? 'bg-amber-500 text-black' : 'text-neutral-400')}>{l}</button>)}</div>
+      {tab === 'chat' && <DirectChatBox phone={currentCustomer.phone} customerName={currentCustomer.name} role="customer" lang={lang} initialDraft={chatDraft} onClearDraft={() => setChatDraft('')} />}
+      {tab === 'ledger' && <div className="bg-neutral-900 border border-cyan-500/30 p-4 rounded-3xl space-y-2"><strong className="text-cyan-300 block">📜 {L('سجل حركات المحفظة:', 'Wallet Transactions:', lang)}</strong><div className="max-h-64 overflow-y-auto space-y-1 no-scrollbar">{(currentCustomer.walletHistory || []).length === 0 ? <p className="text-neutral-500 text-center py-6">{L('لا توجد حركات مسجلة بعد.', 'No transactions yet.', lang)}</p> : currentCustomer.walletHistory.map(t => <div key={t.id} className="p-2.5 bg-neutral-950 rounded-xl flex justify-between"><span>{t.reason} <span className="text-[10px] text-neutral-500 font-mono">({t.date} {t.time})</span></span><strong className={"font-mono " + (t.delta >= 0 ? 'text-emerald-400' : 'text-rose-400')}>{t.delta >= 0 ? '+' : ''}{t.delta} {L('ج', 'EGP', lang)}</strong></div>)}</div></div>}
+      {tab === 'missions' && <div className="space-y-4"><div className="p-4 bg-neutral-900 border border-neutral-800 rounded-3xl space-y-2"><div className="flex justify-between"><strong>🚀 {L('مسار هدية الـ 24 ساعة (', '24-Hour Milestone (', lang)}{m24Amt} {L('ج بموافقة المدير):', 'EGP Admin Approved):', lang)}</strong><span className="text-amber-400 font-mono font-bold">{eligible24.toFixed(1)} / 24h</span></div><div className="w-full h-3 bg-neutral-950 rounded-full border border-neutral-800 overflow-hidden"><div className="h-full bg-gradient-to-r from-amber-500 to-emerald-400" style={{ width: Math.min(100, (eligible24 / 24) * 100) + "%" }} /></div>{eligible24 >= 24 && <button disabled={busy} onClick={async () => { setBusy(true); try { const r = await submitGiftRequest({ customerPhone: currentCustomer.phone, customerName: currentCustomer.name, sourceType: 'hours_24', title: "🚀 مكافأة إتمام 24 ساعة (" + m24Amt + " ج)", titleEn: "🚀 24h Play Milestone (" + m24Amt + " EGP)", rewardType: 'wallet', amount: m24Amt }); if (r.ok) { await db.collection('customers').doc(currentCustomer.phone).set({ hoursClaimed24h: firebase.firestore.FieldValue.increment(24) }, { merge: true }); playNotificationSound('cash'); toast(L('تم إرسال المكافأة لموافقة المدير!', 'Sent for Admin approval!', lang)); } } finally { setBusy(false); } }} className="w-full py-2 bg-emerald-500 text-black font-black rounded-xl">🎁 {L('طلب صرف ', 'Claim ', lang)}{m24Amt}{L(' ج', ' EGP', lang)}</button>}</div><AccountAchievementsBox currentCustomer={currentCustomer} bookings={bookings} missions={missions} config={config} lang={lang} />{(gifts || []).length > 0 && <div className="bg-neutral-900 border border-emerald-500/30 p-4 rounded-3xl space-y-2"><h3 className="font-black text-emerald-400 text-sm">🎁 {L('هداياي ومكافآتي:', 'My Gifts:', lang)}</h3>{gifts.map(g => <div key={g.id} className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 flex justify-between items-center"><div><strong className="text-white block">{lang === 'en' ? (g.titleEn || g.title) : g.title}</strong>{g.scheduledDate && <span className="text-[10px] text-cyan-300 font-mono block">📅 {g.scheduledDate} {formatTime12(g.scheduledTime || '', lang)}</span>}</div><span className="px-2.5 py-1 rounded-xl text-[10px] font-black bg-neutral-900 text-amber-400">{trStatus(g.status, lang)}</span></div>)}</div>}<div className="p-4 bg-gradient-to-r from-amber-500/15 to-neutral-900 border border-amber-500/30 rounded-3xl flex justify-between items-center"><div><strong className="text-white block">🎁 {L('كود الإحالة:', 'Referral Code:', lang)} <span className="text-amber-400 font-mono">{currentCustomer.myReferralCode || 'TX-VIP'}</span></strong><span className="text-[10px] text-neutral-400">{L("مكافأة " + refAmt + "ج لكل صديق يتفعل بكودك!", refAmt + " EGP bonus per referred friend!", lang)}</span></div><button onClick={() => { navigator.clipboard.writeText(currentCustomer.myReferralCode || 'TX-VIP'); toast('📋'); }} className="px-3 py-1.5 bg-neutral-800 text-white rounded-xl font-bold">{L('نسخ', 'Copy', lang)}</button></div></div>}
+      {tab === 'bookings' && <div className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3">{bookings.length === 0 ? <p className="text-neutral-500 text-center py-6">{L('لا توجد حجوزات بعد.', 'No bookings yet.', lang)}</p> : bookings.map(b => {
+        const ti = getBookingTimerInfo(b, now), ns = getBookingNoShowState(b, now), canCancel = ['awaiting_admin_approval', 'confirmed'].includes(b.status) && ti.state === 'scheduled' && ns === 'normal' && !b.isPackOrder;
+        const waHelpMsg = L("مرحباً إدارة " + config.loungeName + "، بخصوص الحجز " + b.ref + " (" + b.date + " " + formatTime12(b.time, lang) + ")" + (b.extRefundPending > 0 ? (" — أتابع استرداد المبلغ المتبقي (" + b.extRefundPending + "ج) من التحويل الخارجي.") : ""), "Hello Management, regarding booking " + b.ref + (b.extRefundPending > 0 ? (" — following up on external refund (" + b.extRefundPending + " EGP).") : ""), lang);
+        return (<div key={b.id} className="p-3.5 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-2"><div className="flex justify-between items-center gap-2"><div><strong className="text-amber-400 font-mono">{b.ref}</strong> <span className="text-white">{b.devicesSummary}</span><span className="block text-[10px] text-neutral-400">{b.date} ({formatTime12(b.time, lang)}) | {b.snacksSummary}</span>{b.rejectedReason && <span className="block text-[10px] text-rose-400 font-bold">{L('السبب:', 'Reason:', lang)} {b.rejectedReason}</span>}{b.cancelNote && <span className="block text-[10px] text-amber-300 font-bold mt-1">{b.cancelNote}</span>}</div><div className="text-left shrink-0"><strong className="font-mono block">{b.prepaidHoursDeducted > 0 ? (b.prepaidHoursDeducted + "h") : (b.totalCost + L(' ج', ' EGP', lang))}</strong><span className="text-[10px] font-bold text-amber-400">{trStatus(b.status, lang)}</span></div></div>{ns === 'same_day_makeup' && <div className="p-2 bg-amber-500/15 border border-amber-500/40 rounded-xl text-[10px] text-amber-200 font-bold">⏰ {L('فات ميعادك — يمكنك التعويض في نفس اليوم فقط حسب توفر شاشة.', 'Missed slot — same-day makeup only based on screen availability.', lang)}</div>}{ns === 'expired_forfeited' && <div className="p-2 bg-rose-500/15 border border-rose-500/40 rounded-xl text-[10px] text-rose-300 font-bold">❌ {L('انتهى اليوم دون حضور.', 'Day ended without check-in.', lang)}</div>}{(ti.state === 'running' || ti.state === 'paused') && <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-wrap justify-between items-center gap-2"><span className="font-mono font-black text-amber-300">{Math.floor(ti.remainingSec / 60)}:{String(ti.remainingSec % 60).padStart(2, '0')}</span><div className="flex gap-1.5"><button onClick={() => handleRequestSmartExtension(b)} className="px-2.5 py-1 bg-amber-500 text-black font-black rounded-lg text-[10px]">+30m</button><button onClick={() => handleEmergencyCancel(b)} className="px-2.5 py-1 bg-rose-600 text-white font-black rounded-lg text-[10px]">⚠️ {L('إلغاء طارئ', 'Emergency Cancel', lang)}</button></div></div>}<div className="flex flex-wrap gap-1.5">{!b.isPackOrder && ['awaiting_admin_approval', 'confirmed'].includes(b.status) && ns !== 'expired_forfeited' && ti.state !== 'finished' && <button onClick={() => setBookingQRTarget(b)} className="px-3 py-1.5 bg-purple-600 text-white rounded-xl text-[10px] font-black">🎟️ QR</button>}{canCancel && <button disabled={busy} onClick={() => onCancelClick(b)} className="px-3 py-1.5 bg-rose-600/20 text-rose-300 border border-rose-500/30 rounded-xl text-[10px] font-bold">✕ {L('إلغاء الحجز', 'Cancel Booking', lang)}</button>}{b.status === 'confirmed' && ti.state === 'scheduled' && ns === 'normal' && <button onClick={() => setOnTheWayTarget(b)} className="px-3 py-1.5 bg-amber-500 text-black rounded-xl text-[10px] font-black">🚗 {L('في الطريق', 'On The Way', lang)}</button>}<button onClick={() => { setChatDraft(waHelpMsg); setTab('chat'); }} className="px-3 py-1.5 bg-neutral-800 text-cyan-300 rounded-xl text-[10px] font-bold">💬 {L('شات المدير', 'Chat Admin', lang)}</button><a href={"https://wa.me/" + formatWhatsAppNum(config.whatsappNumber) + "?text=" + encodeURIComponent(waHelpMsg)} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-emerald-600/20 text-emerald-300 rounded-xl text-[10px] font-bold">📲 {L('واتساب', 'WhatsApp', lang)}</a></div></div>);
+      })}</div>}
+      {showEdit && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"><form onSubmit={async e => { e.preventDefault(); if (!validateEgyptianPhone(edWa)) return showAlert(L('رقم الواتساب غير صحيح.', 'Invalid WhatsApp.', lang)); const u = { name: edName.trim(), whatsappPhone: edWa.trim() }; if (edPass.trim().length >= 4) { u.password = await sha256Hex(edPass.trim()); u.passwordVersion = Date.now(); safeSetStorage('twix_session_pv', String(u.passwordVersion)); } if (edAva) u.avatarUrl = edAva; if (!currentCustomer.birthVerified && edBirth && edIdDoc) { const med = await saveMediaDoc(edIdDoc, "ID-" + currentCustomer.phone, 'id_card'); u.birthDate = edBirth; u.idCardMediaId = med.mediaId; u.birthDocPending = true; } await db.collection('customers').doc(currentCustomer.phone).set(u, { merge: true }); setShowEdit(false); playNotificationSound('cash'); toast('✓'); }} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-2.5"><div className="flex justify-between"><h3 className="font-bold text-white">✏️ {L('تعديل بياناتي', 'Edit Profile', lang)}</h3><button type="button" onClick={() => setShowEdit(false)}>✕</button></div><input required value={edName} onChange={e => setEdName(e.target.value)} placeholder={L('الاسم', 'Name', lang)} className="w-full bg-neutral-950 p-2 rounded-xl text-white" /><input required type="tel" value={edWa} onChange={e => setEdWa(e.target.value)} placeholder={L('رقم الواتساب', 'WhatsApp Phone', lang)} className="w-full bg-neutral-950 p-2 rounded-xl text-emerald-300 font-mono text-left" /><input type="password" value={edPass} onChange={e => setEdPass(e.target.value)} placeholder={L('رقم سري جديد (اختياري)', 'New Password (Optional)', lang)} className="w-full bg-neutral-950 p-2 rounded-xl text-white" /><FilePickerButton onPick={setEdAva} label={edAva ? '✓' : L('🖼️ صورة شخصية', '🖼️ Avatar', lang)} />{!currentCustomer.birthVerified && <div className="grid grid-cols-2 gap-2"><input type="date" value={edBirth} onChange={e => setEdBirth(e.target.value)} className="bg-neutral-950 rounded-xl p-2 text-white font-mono text-[10px]" /><FilePickerButton onPick={setEdIdDoc} label={edIdDoc ? '✓' : '🪪 ID'} /></div>}<button className="w-full py-2.5 bg-amber-500 text-black font-black rounded-xl">{L('حفظ', 'Save', lang)}</button></form></div>}
+      {showTopup && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4"><form onSubmit={async e => { e.preventDefault(); if (!topRec || topPh.trim().length < 3) return showAlert(L('أدخل بيانات التحويل وارفع السكرين!', 'Enter sender details & attach receipt!', lang)); const med = await saveMediaDoc(topRec, "TOP-" + currentCustomer.phone, 'receipt'), id = "top-" + Date.now(); await db.collection('wallet_requests').doc(id).set({ id, customerName: currentCustomer.name, customerPhone: currentCustomer.phone, amount: Number(topAmt), senderPhone: topPh.trim(), senderName: topNm.trim() || currentCustomer.name, receiptMediaId: med.mediaId, receiptHash: med.hash, duplicateReceiptOf: med.duplicateOf, status: 'pending', createdAt: new Date().toISOString() }); setShowTopup(false); setTopRec(null); playNotificationSound('cash'); toast(L('تم إرسال طلب الشحن للمدير!', 'Top-up request sent!', lang)); }} className="bg-neutral-900 border border-neutral-800 rounded-3xl p-6 max-w-sm w-full space-y-2.5"><div className="flex justify-between"><h3 className="font-bold text-white">➕ {L('شحن المحفظة', 'Top-up Wallet', lang)}</h3><button type="button" onClick={() => setShowTopup(false)}>✕</button></div><input type="number" min={20} required value={topAmt} onChange={e => setTopAmt(e.target.value)} className="w-full bg-neutral-950 p-2 rounded-xl text-center font-mono font-bold text-white" /><div className="bg-neutral-950 p-2.5 rounded-xl border border-neutral-800 space-y-1 text-[10px]">{walletMap.map(w => <div key={w.id} className="flex justify-between"><span>{w.name}:</span><strong className="text-amber-400 font-mono">{w.num}</strong></div>)}</div><input required value={topPh} onChange={e => setTopPh(e.target.value)} placeholder={L('رقم/حساب المحول منه', 'Sender Phone / IPA', lang)} className="w-full bg-neutral-950 p-2 rounded-xl text-white font-mono text-left" /><input required value={topNm} onChange={e => setTopNm(e.target.value)} placeholder={L('التحويل باسم مين؟', 'Sender Name', lang)} className="w-full bg-neutral-950 p-2 rounded-xl text-white" /><FilePickerButton onPick={setTopRec} label={topRec ? '✓' : L('📸 رفع السكرين *', '📸 Upload Receipt *', lang)} />{topRec && <img src={topRec} className="max-h-20 mx-auto rounded-lg" />}<button className="w-full py-2.5 bg-emerald-500 text-black font-black rounded-xl">{L('إرسال للمدير ➔', 'Submit →', lang)}</button></form></div>}
+    </div>
+  );
+    }
+    function createAdminHandlers({ adminShift, activeShiftKey, todayStr, config, pricing, devices, now }) {
+  const updateCustomerPhoneAndMigrate = async (oldPhone, newPhone, extra = {}) => {
+    const oldPh = String(oldPhone || '').trim(), newPh = String(newPhone || '').trim();
+    if (!validateEgyptianPhone(newPh)) throw new Error('رقم الهاتف الجديد غير صحيح.');
+    if (oldPh === newPh) { await db.collection('customers').doc(oldPh).set(extra, { merge: true }); return; }
+    if ((await db.collection('customers').doc(newPh).get()).exists) throw new Error('الرقم الجديد مسجل لعميل آخر!');
+    const oldSnap = await db.collection('customers').doc(oldPh).get(); if (!oldSnap.exists) throw new Error('العميل غير موجود.');
+    await db.collection('customers').doc(newPh).set({ ...oldSnap.data(), ...extra, phone: newPh, myReferralCode: "TX-" + newPh.slice(-4) });
+    const [bS, wS, gS] = await Promise.all([db.collection('bookings').where('phone', '==', oldPh).get(), db.collection('wallet_requests').where('customerPhone', '==', oldPh).get(), db.collection('gifts').where('customerPhone', '==', oldPh).get()]);
+    for (const d of bS.docs) await d.ref.update({ phone: newPh }); for (const d of wS.docs) await d.ref.update({ customerPhone: newPh }); for (const d of gS.docs) await d.ref.update({ customerPhone: newPh });
+    await db.collection('customers').doc(oldPh).delete(); logSystemEvent(adminShift, 'CHANGE_PHONE', oldPh + " -> " + newPh);
+  };
+  const confirmBooking = async (b, { checkInNow = false, makeupToday = false } = {}) => {
+    if (!b) throw new Error('الحجز غير موجود');
+    if (b.isPackOrder) {
+      if (b.status === 'confirmed') return { ok: true, msg: 'الباقة مؤكدة بالفعل' };
+      const expMs = Date.now() + Number(b.packValidDays || 30) * 86400000, is5 = (b.packDeviceType || 'PS5') === 'PS5';
+      await db.runTransaction(async tx => {
+        const cRef = db.collection('customers').doc(b.phone), cs = await tx.get(cRef); if (!cs.exists) throw new Error('حساب العميل غير موجود!');
+        const d = cs.data(), fH = is5 ? 'prepaidPS5Hours' : 'prepaidPS4Hours', fE = is5 ? 'prepaidPS5Exp' : 'prepaidPS4Exp';
+        const curH = Number(d[fH] ?? (d.prepaidDeviceType === b.packDeviceType ? d.prepaidHours : 0) ?? 0), nextH = Number((curH + Number(b.packHours || 0)).toFixed(2));
+        const nf = { id: "nf-" + Date.now(), title: "✅ تم تفعيل باقة الساعات الشهرية!", body: "+" + b.packHours + "س (" + b.packDeviceType + ")", read: false, date: todayStr, time: getCairoTimeStr() };
+        tx.update(cRef, { [fH]: nextH, [fE]: expMs, prepaidHours: nextH, prepaidDeviceType: b.packDeviceType || 'PS5', prepaidExpiresAt: expMs, totalSpent: Number(d.totalSpent || 0) + Number(b.totalCost || 0), notifications: [nf, ...(d.notifications || [])].slice(0, 35) });
+      });
+      await db.collection('bookings').doc(b.id).update({ status: 'confirmed', rewardedStats: true, timerStatus: 'finished' });
+      logSystemEvent(adminShift, 'CONFIRM_PACK', b.ref); playNotificationSound('cash'); return { ok: true, msg: "✅ تم تفعيل باقة " + b.customerName };
+    }
+    const reqDevs = Array.isArray(b.bookedDevices) && b.bookedDevices.length ? b.bookedDevices : [{ type: (b.devicesSummary || '').includes('PS5') ? 'PS5' : 'PS4', mode: 'single', duration: Number(b.duration || 30) }];
+    const nowT = new Date().toLocaleTimeString('en-GB', { timeZone: 'Africa/Cairo', hour: '2-digit', minute: '2-digit', hour12: false });
+    let chk = await findAvailableDevicesForSlot(makeupToday ? todayStr : b.date, makeupToday ? nowT : b.time, reqDevs, devices, b.id, (!makeupToday && b.assignedDeviceIds?.length) ? b.assignedDeviceIds : null);
+    if (!chk.ok && b.assignedDeviceIds?.length) chk = await findAvailableDevicesForSlot(makeupToday ? todayStr : b.date, makeupToday ? nowT : b.time, reqDevs, devices, b.id, null);
+    if (!chk.ok) throw new Error(chk.error);
+    const shouldRun = checkInNow || makeupToday || (b.date === todayStr && parseCairoSlotMs(b.date, b.time) <= Date.now() && (parseCairoSlotMs(b.date, b.time) + Number(b.duration || 30) * 60000) > Date.now());
+    const upd = { status: 'confirmed', assignedDeviceIds: b.isParty ? devices.filter(d => d.status !== 'maintenance').map(d => d.id) : chk.assignedIds, checkedIn: !!(checkInNow || makeupToday), compensatedToday: !!makeupToday, actualStartMs: (checkInNow || makeupToday) ? Date.now() : (b.actualStartMs || null), timerStatus: shouldRun ? 'running' : 'scheduled', timerAnchorMs: shouldRun ? Date.now() : null, remainingSecAtAnchor: shouldRun ? Number(b.duration || 30) * 60 : null };
+    if (!b.rewardedStats && b.phone) {
+      const mins = Number(b.duration || 30), xpAdd = Math.round(mins * 1.5), hrsAdd = Number((mins / 60).toFixed(2)), cashSpent = Number(b.prepaidHoursDeducted || 0) > 0 ? Number(b.remainingCashToTransfer || 0) : Number(b.totalCost || 0);
+      await db.runTransaction(async tx => { const cRef = db.collection('customers').doc(b.phone), cs = await tx.get(cRef); if (!cs.exists) return; const d = cs.data(), nf = { id: "nf-" + Date.now(), title: "✅ تم تأكيد حجزك (" + b.ref + ")", body: b.devicesSummary + " — " + b.date + " " + formatTime12(b.time, 'ar'), read: false, date: todayStr, time: getCairoTimeStr() }; tx.update(cRef, { hoursPlayed: Number(d.hoursPlayed || 0) + hrsAdd, xp: Number(d.xp || 50) + xpAdd, totalSpent: Number(d.totalSpent || 0) + cashSpent, notifications: [nf, ...(d.notifications || [])].slice(0, 35) }); });
+      await updatePublicRankXP(b.phone, b.customerName, xpAdd); upd.rewardedStats = true;
+    }
+    await db.collection('bookings').doc(b.id).update(upd); logSystemEvent(adminShift, makeupToday ? 'MAKEUP_TODAY' : 'CONFIRM_BOOKING', b.ref); playNotificationSound('cash');
+    return { ok: true, msg: "✅ تم تأكيد وتفعيل " + b.customerName + " (" + b.ref + ")" };
+  };
+  const rejectBooking = async (b, { refundCashToWallet = false, reason = '' } = {}) => {
+    if (!b || b.status === 'rejected') return;
+    await db.collection('bookings').doc(b.id).update({ status: 'rejected', timerStatus: 'finished', rejectedReason: reason || (refundCashToWallet ? 'إلغاء مع رد المبلغ للمحفظة' : 'رفض التحويل/الإيصال') });
+    if (b.couponId && b.phone) await db.collection('coupons').doc(b.couponId).update({ usedBy: firebase.firestore.FieldValue.arrayRemove(b.phone) }).catch(() => {});
+    if (b.phone) {
+      const walBack = Number(b.walletDeduction || 0) + (refundCashToWallet ? Number(b.remainingCashToTransfer || 0) : 0), ps5B = Number(b.prepaidPS5Deducted || 0), ps4B = Number(b.prepaidPS4Deducted || 0), mins = Number(b.duration || 30);
+      await db.runTransaction(async tx => {
+        const ref = db.collection('customers').doc(b.phone), s = await tx.get(ref); if (!s.exists) return; const d = s.data(), u = {};
+        if (walBack > 0) { u.walletBalance = Number(d.walletBalance || 0) + walBack; u.walletHistory = [{ id: "tx-" + Date.now(), delta: walBack, reason: "رد حجز " + b.ref, date: todayStr, time: getCairoTimeStr() }, ...(d.walletHistory || [])].slice(0, 50); }
+        if (ps5B > 0) u.prepaidPS5Hours = Number((Number(d.prepaidPS5Hours || 0) + ps5B).toFixed(2)); if (ps4B > 0) u.prepaidPS4Hours = Number((Number(d.prepaidPS4Hours || 0) + ps4B).toFixed(2));
+        if (b.rewardedStats) { u.hoursPlayed = Math.max(0, Number(d.hoursPlayed || 0) - Number((mins / 60).toFixed(2))); u.xp = Math.max(0, Number(d.xp || 50) - Math.round(mins * 1.5)); }
+        if (b.promoCodeUsed) u.usedPromos = (d.usedPromos || []).filter(p => p !== b.promoCodeUsed);
+        u.notifications = [{ id: "nf-" + Date.now(), title: "❌ تم إلغاء/رفض الحجز (" + b.ref + ")", body: (reason ? reason + " | " : "") + (walBack > 0 ? ("تم رد " + walBack + "ج للمحفظة") : ''), read: false, date: todayStr, time: getCairoTimeStr() }, ...(d.notifications || [])].slice(0, 35);
+        tx.update(ref, u);
+      });
+      if (b.rewardedStats) await updatePublicRankXP(b.phone, b.customerName, -Math.round(mins * 1.5));
+    }
+    if (b.selectedSnacks) { const rev = {}; Object.entries(b.selectedSnacks).forEach(([k, q]) => { if (q > 0) rev[k] = Number(q); }); await atomicAdjustSnackStock(rev).catch(() => {}); }
+    logSystemEvent(adminShift, 'REJECT_BOOKING', b.ref); playNotificationSound('alert');
+  };
+  const controlTimer = async (b, action, deltaMins = 0, addFee = false) => {
+    const ti = getBookingTimerInfo(b, now), upd = {};
+    if (action === 'start') { upd.checkedIn = true; upd.actualStartMs = Date.now(); upd.timerStatus = 'running'; upd.timerAnchorMs = Date.now(); upd.remainingSecAtAnchor = Number(b.duration || 30) * 60; }
+    else if (action === 'pause') { upd.timerStatus = 'paused'; upd.remainingSecOnPause = ti.remainingSec; }
+    else if (action === 'resume') { upd.timerStatus = 'running'; upd.timerAnchorMs = Date.now(); upd.remainingSecAtAnchor = Number(b.remainingSecOnPause ?? ti.remainingSec); }
+    else if (action === 'adjust') {
+      const newDur = Math.max(15, Number(b.duration || 30) + deltaMins), newRem = Math.max(60, ti.remainingSec + deltaMins * 60);
+      upd.duration = newDur; if (b.timerStatus === 'paused') upd.remainingSecOnPause = newRem; else { upd.timerStatus = 'running'; upd.timerAnchorMs = Date.now(); upd.remainingSecAtAnchor = newRem; }
+      if (addFee && deltaMins > 0) { const dt = b.bookedDevices?.[0]?.type || ((b.devicesSummary || '').includes('PS5') ? 'PS5' : 'PS4'), md = b.bookedDevices?.[0]?.mode || 'single', fee = calcDevicePrice(pricing, dt, md, deltaMins); upd.totalCost = Number(b.totalCost || 0) + fee; upd.remainingCashToTransfer = Number(b.remainingCashToTransfer || 0) + fee; }
+    } else if (action === 'finish') upd.timerStatus = 'finished';
+    await db.collection('bookings').doc(b.id).update(upd); if (b.phone) pushCustomerMeta(b.phone, { notifTitle: "⏱️ تحديث وقت حجزك (" + b.ref + ")", notifBody: action === 'start' ? 'تم تشغيل الشاشة الآن!' : (action === 'adjust' ? ("تعديل الوقت (" + (deltaMins > 0 ? "+" : "") + deltaMins + "د)") : action) });
+    logSystemEvent(adminShift, "TIMER_" + action.toUpperCase(), b.ref); playNotificationSound('click');
+  };
+  const approveGift = async (g, sDate, sTime, vDays = 7) => {
+    const exp = Date.now() + Number(vDays || 7) * 86400000;
+    await db.runTransaction(async tx => {
+      const gRef = db.collection('gifts').doc(g.id), snap = await tx.get(gRef); if (!snap.exists || snap.data().status !== 'pending_admin') throw new Error('تمت المعالجة مسبقاً!');
+      tx.update(gRef, { status: 'approved_scheduled', scheduledDate: sDate || todayStr, scheduledTime: sTime || '18:00', expiresAt: exp, approvedBy: adminShift });
+      if (g.customerPhone && (g.rewardType === 'wallet' || g.rewardType === 'xp') && Number(g.amount || 0) > 0) {
+        const cRef = db.collection('customers').doc(g.customerPhone), cs = await tx.get(cRef);
+        if (cs.exists) { const d = cs.data(), u = { notifications: [{ id: "nf-" + Date.now(), title: "🎁 تم اعتماد هديتك!", body: g.title + " — " + (sDate || todayStr), read: false, date: todayStr, time: getCairoTimeStr() }, ...(d.notifications || [])].slice(0, 35) }; if (g.rewardType === 'wallet') { u.walletBalance = Number(d.walletBalance || 0) + Number(g.amount); u.walletHistory = [{ id: "tx-" + Date.now(), delta: Number(g.amount), reason: g.title, date: todayStr, time: getCairoTimeStr() }, ...(d.walletHistory || [])].slice(0, 50); } else u.xp = Number(d.xp || 0) + Number(g.amount); tx.update(cRef, u); }
+      }
+    });
+    logSystemEvent(adminShift, 'APPROVE_GIFT', g.customerPhone); playNotificationSound('cash');
+  };
+  return { updateCustomerPhoneAndMigrate, confirmBooking, rejectBooking, controlTimer, approveGift };
+    }
