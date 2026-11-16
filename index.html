@@ -997,4 +997,174 @@ function PredictionsPage({ matches, currentCustomer, config, lang }) {
     </div>
   );
     }
+    function ChallengesPage({ challenges, tournaments, publicRanks, currentCustomer, config, lang }) {
+  const { showAlert, showConfirm, toast } = useTwixUI();
+  const [cName, setCName] = useState(currentCustomer?.name || ''); const [cPhone, setCPhone] = useState(currentCustomer?.phone || '');
+  const [game, setGame] = useState('EA FC 25 / FIFA'); const [stake, setStake] = useState(L('الخسران يحاسب على المشاريب 🥤', 'Loser pays for drinks 🥤', lang)); const [busy, setBusy] = useState(false);
+  const sorted = [...challenges].filter(c => (c.score || c.streak || 0) > 0).sort((a, b) => (b.score || b.streak || 0) - (a.score || a.streak || 0));
+  const rank1 = challenges.find(c => c.isBoss) || sorted[0] || { playerName: L('شاغر للتحدي 👑', 'Open Spot 👑', lang), score: 0, game: 'FIFA / FC' };
+  const rank2 = sorted[1] || { playerName: L('شاغر (المركز الثاني)', 'Open (#2)', lang), score: 0 }, rank3 = sorted[2] || { playerName: L('شاغر (المركز الثالث)', 'Open (#3)', lang), score: 0 };
+  const mKey = getCairoMonthKey(), monthlyTop = [...publicRanks].filter(r => r.monthKey === mKey && (r.monthlyXP || 0) > 0).sort((a, b) => (b.monthlyXP || 0) - (a.monthlyXP || 0)).slice(0, 3);
+  const lvlInfo = currentCustomer ? calculateInfiniteLevel(currentCustomer.xp, currentCustomer.hoursPlayed, lang) : null;
+  const shareUrl = window.location.origin + window.location.pathname + "?page=challenges" + (currentCustomer?.myReferralCode ? "&ref=" + currentCustomer.myReferralCode : "");
+  const shareWhatsAppRank = () => {
+    const msg = currentCustomer ? L("🏆 أنا Level " + lvlInfo.level + " (" + lvlInfo.title + ") في " + config.loungeName + "! ⚔️ بتحداك — سجل بكودي " + currentCustomer.myReferralCode + ": " + shareUrl, "🏆 I'm Level " + lvlInfo.level + " at " + config.loungeName + "! Join with code " + currentCustomer.myReferralCode + ": " + shareUrl, lang) : L("⚔️ تعالى العب معايا في " + config.loungeName + ": " + shareUrl, "⚔️ Challenge me at " + config.loungeName + ": " + shareUrl, lang);
+    window.open("https://wa.me/?text=" + encodeURIComponent(msg), "_blank");
+  };
+  const handleCreate = (e) => {
+    e.preventDefault(); if (busy) return; if (!cName.trim() || hasLocalProfanity(cName)) return showAlert(L('اكتب اسماً لائقاً.', 'Enter valid name.', lang)); if (!validateEgyptianPhone(cPhone)) return showAlert(L('رقم هاتف مصري غير صحيح.', 'Invalid Egyptian phone.', lang));
+    setBusy(true); const id = "ch-" + Date.now();
+    db.collection('challenges').doc(id).set({ id, playerName: cName.trim(), phone: cPhone.trim(), whatsappPhone: currentCustomer?.whatsappPhone || cPhone.trim(), game, stake, score: 0, isBoss: false, moderated: false, time: getCairoTimeStr(new Date(), lang), status: 'waiting', createdAt: new Date().toISOString() }).then(() => { setBusy(false); playNotificationSound('cash'); toast(L('تم نشر التحدي!', 'Challenge posted!', lang)); });
+  };
+  const joinTournament = async (t) => {
+    if (!currentCustomer) return showAlert(L('سجل دخولك أولاً للاشتراك في البطولة!', 'Sign in first to join tournament!', lang));
+    const maxP = Number(t.maxPlayers || 16), appCount = (t.approvedPlayers || []).length;
+    if ((t.approvedPlayers || []).some(p => p.phone === currentCustomer.phone) || (t.pendingPlayers || []).some(p => p.phone === currentCustomer.phone)) return showAlert(L('أنت مسجل بالفعل في هذه البطولة!', 'Already registered!', lang));
+    if (appCount >= maxP) return showAlert(L('⛔ البطولة اكتملت بالكامل!', '⛔ Tournament is full!', lang));
+    const fee = Number(t.entryFee || 0);
+    if (fee > 0 && Number(currentCustomer.walletBalance || 0) < fee) return showAlert(L("رصيد محفظتك (" + (currentCustomer.walletBalance || 0) + "ج) أقل من رسم الاشتراك (" + fee + "ج).", "Wallet balance (" + (currentCustomer.walletBalance || 0) + ") < Entry fee (" + fee + ").", lang));
+    if (fee > 0 && !(await showConfirm(L("سيتم خصم وحجز " + fee + "ج من محفظتك لحين موافقة المدير. متأكد؟", "Hold " + fee + " EGP from wallet pending Admin approval?", lang)))) return;
+    setBusy(true);
+    try {
+      if (fee > 0) await db.runTransaction(async tx => { const cRef = db.collection('customers').doc(currentCustomer.phone), s = await tx.get(cRef), bal = Number(s.data()?.walletBalance || 0); if (bal < fee) throw new Error(L('رصيد غير كافٍ', 'Insufficient wallet', lang)); tx.update(cRef, { walletBalance: bal - fee, walletHistory: [{ id: "tx-" + Date.now(), delta: -fee, reason: "حجز اشتراك بطولة " + t.title, date: getCairoDateStr(), time: getCairoTimeStr() }, ...(s.data()?.walletHistory || [])].slice(0, 50) }); });
+      await db.collection('tournaments').doc(t.id).update({ pendingPlayers: firebase.firestore.FieldValue.arrayUnion({ phone: currentCustomer.phone, name: currentCustomer.name, feePaid: fee, requestedAt: new Date().toISOString() }) });
+      playNotificationSound('cash'); toast(L('✓ تم إرسال طلب الاشتراك للمدير!', '✓ Join request sent to Manager!', lang));
+    } catch (err) { showAlert(err?.message || 'Error'); } finally { setBusy(false); }
+  };
+  return (
+    <div className="max-w-4xl mx-auto py-6 space-y-5 text-xs">
+      <div className="flex flex-wrap justify-between items-center gap-2"><h1 className="text-2xl font-black text-white">⚔️ {L('التحديات، البطولات، والـ Top 3', 'Challenges, Tournaments & Top 3', lang)}</h1><button onClick={shareWhatsAppRank} className="px-3.5 py-2 bg-emerald-500 text-black font-black rounded-xl">📲 {L('شارك كارت رتبتك واتحدى أصحابك', 'Share Rank & Challenge', lang)}</button></div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 items-end">
+        <div className="p-4 bg-neutral-900 border border-slate-400/40 rounded-3xl text-center space-y-1 order-2 md:order-1"><span className="text-3xl">🥈</span><strong className="text-white text-sm block">{rank2.playerName}</strong><span className="font-mono text-cyan-400 font-bold block">{L('سكور:', 'Score:', lang)} {rank2.score || 0}</span></div>
+        <div className="p-5 bg-gradient-to-b from-amber-500/25 to-neutral-950 border-2 border-amber-500 rounded-3xl text-center space-y-1 order-1 md:order-2"><span className="bg-amber-500 text-black font-black text-[10px] px-3 py-0.5 rounded-full">{L('عرش الصالة 👑', 'Lounge Crown 👑', lang)}</span><span className="text-4xl block pt-1">👑</span><strong className="text-white text-base block font-black">{rank1.playerName}</strong><span className="text-amber-300 font-bold block">{rank1.game}</span><span className="text-amber-400 font-mono font-black">{rank1.score || rank1.streak || 0} {L('فوز', 'Wins', lang)}</span></div>
+        <div className="p-4 bg-neutral-900 border border-amber-700/40 rounded-3xl text-center space-y-1 order-3"><span className="text-3xl">🥉</span><strong className="text-white text-sm block">{rank3.playerName}</strong><span className="font-mono text-cyan-400 font-bold block">{L('سكور:', 'Score:', lang)} {rank3.score || 0}</span></div>
+      </div>
+      {monthlyTop.length > 0 && <div className="bg-neutral-900 border border-cyan-500/30 p-4 rounded-3xl space-y-2"><strong className="text-cyan-400 block">📅 {L('أبطال الشهر الحالي', 'Monthly Top Players', lang)} ({mKey}):</strong><div className="grid grid-cols-1 sm:grid-cols-3 gap-2">{monthlyTop.map((r, i) => <div key={r.id || i} className="p-2.5 bg-neutral-950 rounded-2xl text-center border border-neutral-800"><span className="font-black text-amber-400">#{i + 1} {r.name}</span><span className="block font-mono text-[10px] text-neutral-400">{r.monthlyXP} XP</span></div>)}</div></div>}
+      {tournaments.length > 0 && <div className="bg-neutral-900 border border-purple-500/40 p-5 rounded-3xl space-y-3"><h3 className="text-sm font-black text-purple-300">🏆 {L('بطولات الصالة الرسمية:', 'Official Tournaments:', lang)}</h3><div className="grid grid-cols-1 md:grid-cols-2 gap-3">{tournaments.map(t => { const appLen = (t.approvedPlayers || []).length, maxP = Number(t.maxPlayers || 16), isFull = appLen >= maxP, spotsLeft = Math.max(0, maxP - appLen); return (<div key={t.id} className="p-4 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-2"><div className="flex justify-between"><strong className="text-white text-sm">{t.title}</strong><span className={"text-[10px] px-2 py-0.5 rounded font-bold " + (isFull ? 'bg-rose-600/30 text-rose-300' : 'bg-purple-500/20 text-purple-300')}>{t.status === 'closed' ? (t.winner ? (L('الفائز: ', 'Winner: ', lang) + t.winner) : L('منتهية', 'Ended', lang)) : (isFull ? L('⛔ اكتمل العدد', '⛔ Full', lang) : (t.status === 'active' ? L('جارية', 'Live', lang) : L("متبقي " + spotsLeft + " مقعد", spotsLeft + " Left", lang)))}</span></div><div className="text-[11px] text-neutral-400">🎮 {t.game} | {L('الاشتراك:', 'Fee:', lang)} <strong className="text-amber-400">{t.entryFee || 0}</strong> | {L('الجائزة:', 'Prize:', lang)} <strong className="text-emerald-400">{t.prizeText}</strong></div><div className="text-[10px] text-cyan-300 leading-relaxed">{L('المعتمدون', 'Players', lang)} ({appLen}/{maxP}): {(t.approvedPlayers || []).map(p => p.name).join('، ') || L('لا يوجد بعد', 'None yet', lang)}</div>{Array.isArray(t.bracketMatches) && t.bracketMatches.length > 0 && <div className="p-2 bg-neutral-900 rounded-xl space-y-1 text-[10px]"><strong className="text-amber-300 block">⚔️ {L('المواجهات:', 'Bracket:', lang)}</strong>{t.bracketMatches.map((bm, idx) => <div key={idx} className="flex justify-between"><span>{bm.p1} 🆚 {bm.p2}</span>{bm.winner && <strong className="text-emerald-400">🏆 {bm.winner}</strong>}</div>)}</div>}{t.bracketNote && <div className="p-2 bg-neutral-900 rounded-xl text-[10px] text-amber-200 whitespace-pre-line">{t.bracketNote}</div>}{t.status === 'open' && (isFull ? <div className="w-full py-2 bg-rose-950/60 border border-rose-500/40 text-rose-300 font-black rounded-xl text-center">⛔ {L('اكتمل عدد البطولة', 'Tournament Full', lang)} ({appLen}/{maxP})</div> : <button disabled={busy} onClick={() => joinTournament(t)} className="w-full py-2 bg-purple-600 text-white font-black rounded-xl">{L('طلب الاشتراك في البطولة 🏆', 'Join Tournament 🏆', lang)}</button>)}</div>); })}</div></div>}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5"><form onSubmit={handleCreate} className="bg-neutral-900 border border-neutral-800 p-5 rounded-3xl space-y-3 h-fit"><h3 className="font-black text-white text-sm border-b border-neutral-800 pb-2">➕ {L('أنشئ طلب تحدي', 'Create Challenge', lang)}</h3><input required value={cName} onChange={e => setCName(e.target.value)} placeholder={L('اسم اللاعب', 'Player Name', lang)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white" /><input required type="tel" value={cPhone} onChange={e => setCPhone(e.target.value)} placeholder="01xxxxxxxxx" className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white font-mono text-left" /><select value={game} onChange={e => setGame(e.target.value)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-white font-bold"><option value="EA FC 25 / FIFA">EA FC 25 / FIFA</option><option value="eFootball / بيس">eFootball / PES</option><option value="Mortal Kombat 1">Mortal Kombat 1</option><option value="Tekken 8">Tekken 8</option></select><input value={stake} onChange={e => setStake(e.target.value)} placeholder={L('شرط التحدي...', 'Stake...', lang)} className="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-2.5 text-amber-300 font-bold" /><button disabled={busy} className="w-full py-2.5 bg-amber-500 text-black font-black rounded-xl">{busy ? '⏳...' : L('نشر التحدي 📢', 'Post Challenge 📢', lang)}</button></form><div className="md:col-span-2 space-y-3"><h3 className="font-black text-white text-sm">⚔️ {L('التحديات المفتوحة', 'Open Challenges', lang)} ({challenges.length}):</h3>{challenges.length === 0 ? <p className="text-neutral-500 py-8 text-center bg-neutral-900 border border-neutral-800 rounded-3xl">{L('لا توجد تحديات حالياً.', 'No challenges yet.', lang)}</p> : challenges.map(ch => <div key={ch.id} className="p-3.5 bg-neutral-900 border border-neutral-800 rounded-2xl flex flex-wrap justify-between items-center gap-2"><div><strong className="text-white block">{ch.playerName} — <span className="text-amber-400">{ch.game}</span></strong><span className="text-[11px] text-neutral-300 block">{ch.stake}</span><span className="text-[10px] text-neutral-400 font-mono">📱 {ch.phone} | {ch.time}</span></div><div className="flex gap-1.5"><a href={"https://wa.me/" + formatWhatsAppNum(ch.whatsappPhone || ch.phone) + "?text=" + encodeURIComponent(L("أهلاً " + ch.playerName + "، قبلت تحديك في " + ch.game + " في صالة " + config.loungeName + "! ⚔️", "Hey " + ch.playerName + ", I accept your " + ch.game + " challenge at " + config.loungeName + "! ⚔️", lang))} target="_blank" rel="noopener noreferrer" className="px-3 py-2 bg-emerald-500 text-black font-black rounded-xl">💬 {L('واتساب', 'WhatsApp', lang)}</a>{currentCustomer?.phone === ch.phone && <button onClick={() => db.collection('challenges').doc(ch.id).update({ status: 'matched' })} className="px-2.5 py-2 bg-neutral-800 text-amber-300 rounded-xl text-[10px] font-bold">{ch.status === 'matched' ? '✓' : L('إغلاق', 'Close', lang)}</button>}</div></div>)}</div></div>
+    </div>
+  );
+}
+function LuckyWheelPage({ wheelSegments, currentCustomer, setCurrentCustomer, myGifts, lang }) {
+  const [isSpinning, setIsSpinning] = useState(false); const [spinDeg, setSpinDeg] = useState(0); const [spinOutcome, setSpinOutcome] = useState(null);
+  const { showAlert, toast } = useTwixUI();
+  const handleSpin = () => {
+    if (!currentCustomer) return showAlert(L("سجل الدخول أولاً لحفظ جوائزك!", "Sign in first to save prizes!", lang));
+    const { hw } = getDeviceFingerprint(), spinKey = "twix_last_spin_" + hw;
+    const last = Math.max(Number(currentCustomer.lastWheelSpin || 0), Number(localStorage.getItem(spinKey) || 0));
+    if (Date.now() - last < 86400000) return showAlert(L("لك لفة واحدة كل 24 ساعة! متبقي " + Math.ceil((86400000 - (Date.now() - last)) / 3600000) + " ساعة.", "1 spin every 24h! Wait " + Math.ceil((86400000 - (Date.now() - last)) / 3600000) + "h.", lang));
+    setIsSpinning(true); setSpinOutcome(null);
+    const totalProb = wheelSegments.reduce((s, x) => s + Number(x.prob || 0), 0) || 100, rand = Math.random() * totalProb;
+    let cum = 0, pickIdx = 0; for (let i = 0; i < wheelSegments.length; i++) { cum += Number(wheelSegments[i].prob || 0); if (rand <= cum) { pickIdx = i; break; } }
+    const picked = wheelSegments[pickIdx], sliceDeg = 360 / wheelSegments.length;
+    setSpinDeg(p => p + 1800 + (360 - (pickIdx * sliceDeg + sliceDeg / 2) - (p % 360)));
+    setTimeout(async () => {
+      setIsSpinning(false); setSpinOutcome(picked); const nowTs = Date.now(); safeSetStorage(spinKey, String(nowTs));
+      await db.collection('customers').doc(currentCustomer.phone).set({ lastWheelSpin: nowTs }, { merge: true });
+      setCurrentCustomer(p => p ? { ...p, lastWheelSpin: nowTs } : p);
+      if (picked.type !== 'none') {
+        await submitGiftRequest({ customerPhone: currentCustomer.phone, customerName: currentCustomer.name, sourceType: 'wheel', title: "🎡 " + picked.label, titleEn: "🎡 " + (picked.labelEn || picked.label), rewardType: picked.type, amount: Number(picked.rewardVal || 0), uniqueKey: "wheel-" + currentCustomer.phone + "-" + nowTs });
+        playNotificationSound('cash'); toast(L("🎉 كسبت! تم إرسال الجائزة للمدير.", "🎉 Won! Sent to Manager.", lang));
+      } else playNotificationSound('click');
+    }, 2600);
+  };
+  const wheelGifts = (myGifts || []).filter(g => g.sourceType === 'wheel');
+  return (
+    <div className="max-w-md mx-auto py-6 space-y-5 text-xs text-center">
+      <h1 className="text-2xl font-black text-white">🎡 {L('عجلة حظ TWIX الدوارة', 'TWIX Lucky Wheel', lang)}</h1>
+      <div className="relative w-64 h-64 mx-auto flex items-center justify-center"><div className="absolute -top-4 z-20 text-3xl text-amber-400">▼</div><div style={{ transform: "rotate(" + spinDeg + "deg)", transition: "transform 2.5s cubic-bezier(0.17, 0.67, 0.12, 0.99)" }} className="w-full h-full rounded-full border-4 border-amber-500/60 bg-neutral-900 flex items-center justify-center overflow-hidden shadow-2xl"><div className="grid grid-cols-2 grid-rows-3 w-full h-full text-[10px] font-black p-2">{wheelSegments.map((s, i) => <div key={s.id || i} className={"flex items-center justify-center text-center p-1 border border-neutral-800 " + (i % 2 === 0 ? 'bg-neutral-950 text-neutral-300' : 'bg-neutral-900 text-amber-400')}><span>{lang === 'en' ? (s.labelEn || s.label) : s.label}</span></div>)}</div></div><button disabled={isSpinning} onClick={handleSpin} className="absolute z-10 w-16 h-16 rounded-full bg-amber-500 text-black font-black border-4 border-black">{isSpinning ? '⏳' : L('دَوّر!', 'SPIN!', lang)}</button></div>
+      {spinOutcome && <div className="p-4 rounded-3xl border bg-neutral-900 border-amber-500/40"><h3 className="text-base font-black text-white">{lang === 'en' ? (spinOutcome.labelEn || spinOutcome.label) : spinOutcome.label}</h3></div>}
+      {wheelGifts.length > 0 && <div className="bg-neutral-900 border border-neutral-800 p-4 rounded-3xl space-y-2 text-right"><strong className="text-white block">🎁 {L('جوائز العجلة:', 'Wheel Prizes:', lang)}</strong>{wheelGifts.map(g => <div key={g.id} className="p-2.5 bg-neutral-950 rounded-xl border border-neutral-800 flex justify-between"><div><strong className="text-white block">{lang === 'en' ? (g.titleEn || g.title) : g.title}</strong>{g.scheduledDate && <span className="text-[10px] text-emerald-400 font-mono">📅 {g.scheduledDate} {formatTime12(g.scheduledTime || '', lang)}</span>}</div><span className="text-[10px] font-black text-amber-400">{trStatus(g.status, lang)}</span></div>)}</div>}
+    </div>
+  );
+}
+  async function squadDeriveKey(code, pin = '') {
+  try {
+    const enc = new TextEncoder(), raw = await crypto.subtle.digest('SHA-256', enc.encode("TWIX_SQ_" + code + "_" + (pin || 'OPEN')));
+    return await crypto.subtle.importKey('raw', raw, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+  } catch { return null; }
+}
+async function squadEncrypt(plain, code, pin = '') {
+  if (!plain) return '';
+  try {
+    const key = await squadDeriveKey(code, pin); if (!key) return plain;
+    const iv = crypto.getRandomValues(new Uint8Array(12)), buf = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(String(plain)));
+    const b = new Uint8Array(iv.length + buf.byteLength); b.set(iv, 0); b.set(new Uint8Array(buf), iv.length);
+    let bin = ''; b.forEach(x => bin += String.fromCharCode(x)); return "ENC:" + btoa(bin);
+  } catch { return plain; }
+}
+async function squadDecrypt(cipher, code, pin = '') {
+  if (!cipher || !String(cipher).startsWith('ENC:')) return cipher || '';
+  try {
+    const key = await squadDeriveKey(code, pin); if (!key) return '🔒';
+    const bin = atob(String(cipher).slice(4)), arr = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: arr.slice(0, 12) }, key, arr.slice(12));
+    return new TextDecoder().decode(pt);
+  } catch { return '🔒 (محتوى مشفر)'; }
+}
+function SquadStoriesSection({ activeCode, squadData, myKey, myName, myRole, hideSeen, onReplyToChat, lang }) {
+  const [stories, setStories] = useState([]); const [viewStory, setViewStory] = useState(null); const [showAdd, setShowAdd] = useState(false);
+  const [stText, setStText] = useState(''); const [stPhoto, setStPhoto] = useState(null); const [stBg, setStBg] = useState('bg-gradient-to-br from-amber-600 to-rose-700');
+  const [stReply, setStReply] = useState(''); const [busy, setBusy] = useState(false); const { showDoubleConfirm, toast } = useTwixUI();
+  useEffect(() => {
+    if (!activeCode) return;
+    return db.collection('squads').doc(activeCode).collection('stories').orderBy('createdAtMs', 'desc').onSnapshot(async s => {
+      const nowMs = Date.now(), arr = [];
+      for (const d of s.docs) { const o = { id: d.id, ...d.data() }; if (Number(o.expiresAtMs || 0) <= nowMs) { d.ref.delete().catch(() => {}); continue; } const txt = await squadDecrypt(o.text, activeCode, squadData.pin); arr.push({ ...o, plainText: txt }); }
+      setStories(arr);
+    }, () => {});
+  }, [activeCode, squadData.pin]);
+  const postStory = async ({ audioBase64 = null, durationSec = 0 } = {}) => {
+    if (busy || (!stText.trim() && !stPhoto && !audioBase64)) return; setBusy(true);
+    try {
+      const id = "st-" + Date.now() + "-" + Math.random().toString(36).slice(2, 4), encTxt = await squadEncrypt(stText.trim(), activeCode, squadData.pin);
+      await db.collection('squads').doc(activeCode).collection('stories').doc(id).set({ id, authorKey: myKey, authorName: myName, text: encTxt, image: stPhoto || null, audioBase64: audioBase64 || null, durationSec, bg: stBg, seenBy: [], reactions: {}, time: getCairoTimeStr(new Date(), lang), createdAtMs: Date.now(), expiresAtMs: Date.now() + 86400000 });
+      setStText(''); setStPhoto(null); setShowAdd(false); playNotificationSound('cash'); toast(L('تم نشر الستوري (24 ساعة)!', 'Story posted (24h)!', lang));
+    } finally { setBusy(false); }
+  };
+  const openStory = (st) => {
+    setViewStory(st);
+    if (!hideSeen && st.authorKey !== myKey && !(st.seenBy || []).some(x => x.key === myKey)) {
+      db.collection('squads').doc(activeCode).collection('stories').doc(st.id).update({ seenBy: firebase.firestore.FieldValue.arrayUnion({ key: myKey, name: myName, at: getCairoTimeStr(new Date(), lang) }) }).catch(() => {});
+    }
+  };
+  const activeV = viewStory ? (stories.find(x => x.id === viewStory.id) || viewStory) : null;
+  return (
+    <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-3 space-y-2 text-xs">
+      <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar pb-1">
+        <button type="button" onClick={() => setShowAdd(true)} className="flex flex-col items-center gap-1 shrink-0"><div className="w-14 h-14 rounded-full border-2 border-dashed border-amber-500 bg-neutral-950 flex items-center justify-center text-xl text-amber-400">+</div><span className="text-[10px] font-bold text-amber-300">{L('ستوري جديد', 'Add Story', lang)}</span></button>
+        {stories.map(st => { const seen = (st.seenBy || []).some(x => x.key === myKey) || st.authorKey === myKey; return <button key={st.id} type="button" onClick={() => openStory(st)} className="flex flex-col items-center gap-1 shrink-0 w-16"><div className={"w-14 h-14 rounded-full p-0.5 " + (seen ? 'border-2 border-neutral-600' : 'bg-gradient-to-tr from-amber-500 via-pink-500 to-purple-500')}><div className={"w-full h-full rounded-full overflow-hidden flex items-center justify-center text-[10px] font-black text-white " + (!st.image ? st.bg : 'bg-black')}>{st.image ? <img src={st.image} className="w-full h-full object-cover" /> : (st.audioBase64 ? '🎤' : (st.plainText || '').slice(0, 8))}</div></div><span className="text-[10px] text-neutral-300 truncate w-full text-center">{st.authorName.split(' ')[0]}</span></button>; })}
+      </div>
+      {showAdd && <div className="p-3 bg-neutral-950 rounded-2xl border border-amber-500/40 space-y-2"><div className="flex justify-between"><strong>📸 {L('نشر ستوري مشفر لأعضاء هذه الشلة (24 ساعة)', 'Encrypted Squad Story (24h)', lang)}</strong><button onClick={() => setShowAdd(false)}>✕</button></div><div className="flex gap-1.5">{['bg-gradient-to-br from-amber-600 to-rose-700', 'bg-gradient-to-br from-purple-700 to-blue-700', 'bg-gradient-to-br from-emerald-700 to-cyan-700', 'bg-neutral-900'].map(c => <button key={c} type="button" onClick={() => setStBg(c)} className={"w-6 h-6 rounded-full border " + c + (stBg === c ? ' ring-2 ring-white' : '')} />)}</div><input value={stText} onChange={e => setStText(e.target.value)} placeholder={L('اكتب حالة أو كلام عالستوري...', 'Story caption/text...', lang)} className="w-full bg-neutral-900 p-2 rounded-xl text-white" />{stPhoto && <img src={stPhoto} className="max-h-24 mx-auto rounded-xl" />}<div className="flex gap-1.5 items-center"><FilePickerButton onPick={setStPhoto} label="📷" className="px-3 py-2 bg-neutral-800 text-cyan-300 rounded-xl font-bold" /><VoiceMicButton lang={lang} disabled={busy} onSendAudio={a => postStory(a)} /><button disabled={busy} type="button" onClick={() => postStory()} className="flex-1 py-2 bg-amber-500 text-black font-black rounded-xl">{busy ? '⏳...' : L('نشر الستوري', 'Post Story', lang)}</button></div></div>}
+      {activeV && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4"><div className="max-w-sm w-full rounded-3xl overflow-hidden border border-amber-500/50 bg-neutral-900 space-y-3 p-4"><div className="flex justify-between items-center"><div><strong className="text-white block">{activeV.authorName}</strong><span className="text-[10px] text-neutral-400 font-mono">{activeV.time}</span></div><div className="flex gap-2">{(activeV.authorKey === myKey || myRole !== 'member') && <button onClick={async () => { if (await showDoubleConfirm(L('حذف هذا الستوري؟', 'Delete this story?', lang))) { await db.collection('squads').doc(activeCode).collection('stories').doc(activeV.id).delete(); setViewStory(null); } }} className="text-rose-400 font-bold">🗑️</button>}<button onClick={() => setViewStory(null)} className="px-2 py-1 bg-neutral-800 rounded-lg">✕</button></div></div><div className={"min-h-[200px] rounded-2xl p-4 flex flex-col items-center justify-center text-center gap-2 " + (!activeV.image ? activeV.bg : 'bg-black')}>{activeV.image && <img src={activeV.image} className="max-h-64 rounded-xl object-contain" />}{activeV.audioBase64 && <AudioPlayerBubble src={activeV.audioBase64} durationSec={activeV.durationSec} />}{activeV.plainText && <p className="text-white font-bold text-sm">{activeV.plainText}</p>}</div>{activeV.authorKey === myKey && <div className="p-2 bg-neutral-950 rounded-xl text-[10px] text-neutral-300">{hideSeen ? L('🔒 تفاصيل المشاهدة مخفية لأنك أغلقت ميزة Seen من إعدادات الخصوصية.', '🔒 Viewers hidden (you disabled Read Receipts).', lang) : ("👁️ (" + (activeV.seenBy || []).length + "): " + ((activeV.seenBy || []).map(s => s.name + " " + s.at).join('، ') || L('لا مشاهدات بعد', 'None yet', lang)))}</div>}<div className="flex gap-1 justify-center">{['❤️', '🔥', '😂', '👍'].map(em => <button key={em} onClick={() => { db.collection('squads').doc(activeCode).collection('stories').doc(activeV.id).set({ reactions: { ...(activeV.reactions || {}), [myKey]: em } }, { merge: true }); toast(em); }} className="px-2.5 py-1 bg-neutral-950 rounded-full border border-neutral-800">{em}</button>)}</div><form onSubmit={e => { e.preventDefault(); if (!stReply.trim()) return; onReplyToChat("📸 رد على ستوري " + activeV.authorName + ": " + stReply.trim()); setStReply(''); setViewStory(null); }} className="flex gap-1.5"><input value={stReply} onChange={e => setStReply(e.target.value)} placeholder={L('رد على الستوري في الشات...', 'Reply in chat...', lang)} className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-2.5 py-1.5 text-white" /><button className="px-3 bg-amber-500 text-black font-black rounded-xl">↩️</button></form></div></div>}
+    </div>
+  );
+}
+function SquadBillAndRaffle({ hubTab, squadData, saveSquad, snacksMenu, lastWinnerRef, lang }) {
+  const { showAlert, showConfirm, toast } = useTwixUI(); const [customP, setCustomP] = useState(''); const players = squadData.splitPlayers || [];
+  const calcPSnacks = (p) => snacksMenu.reduce((sum, sn) => sum + ((p.snacks?.[sn.id] || 0) * sn.price), 0), allSnacksSum = players.reduce((s, p) => s + calcPSnacks(p), 0);
+  const totalBill = Number(squadData.totalBill || 0), netPlay = Math.max(0, totalBill - allSnacksSum), playShare = players.length > 0 ? Math.round((netPlay / players.length) * 100) / 100 : 0;
+  const setCount = (cnt) => { const n = Math.max(1, Math.min(16, Number(cnt || 1))), nxt = [...players]; while (nxt.length < n) nxt.push({ id: Date.now() + nxt.length, name: L('لاعب ', 'Player ', lang) + (nxt.length + 1), snacks: {} }); saveSquad({ splitPlayers: nxt.slice(0, n) }); };
+  const spinFairRaffle = () => {
+    const pool = [...new Set([...(squadData.members || []).map(m => typeof m === 'string' ? m : m.name), ...players.map(p => p.name)].map(x => (x || '').trim()).filter(Boolean))];
+    if (pool.length < 2) return showAlert(L('أضف اسمين على الأقل في الشلة أو الحاسبة عشان القرعة تكون عادلة!', 'Add at least 2 players for a fair raffle!', lang));
+    const filtered = pool.length > 1 && lastWinnerRef.current ? pool.filter(n => n !== lastWinnerRef.current) : pool;
+    const arr = new Uint32Array(1); crypto.getRandomValues(arr); const pick = filtered[arr[0] % filtered.length];
+    lastWinnerRef.current = pick; playNotificationSound('cash'); showAlert(L("🎉 القرعة العشوائية وقعت على: [" + pick + "]! المشاريب عليك النهاردة 🥤", "🎉 Fair Raffle Winner: [" + pick + "]! Drinks are on you 🥤", lang), L('نتيجة القرعة 🎲', 'Raffle Result 🎲', lang));
+  };
+  if (hubTab === 'wheel') return (
+    <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-5 text-center space-y-3 text-xs">
+      <p className="text-neutral-300">{L('تختار عشوائياً بالتشفير وتمنع تكرار نفس الفائز مرتين ورا بعض!', 'Crypto-fair raffle avoiding back-to-back repeats!', lang)}</p>
+      <div className="flex gap-1.5 max-w-xs mx-auto"><input value={customP} onChange={e => setCustomP(e.target.value)} placeholder={L('أضف اسم لاعب للقرعة...', 'Add player...', lang)} className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-2.5 py-1.5 text-white" /><button onClick={() => { if (!customP.trim()) return; saveSquad({ splitPlayers: [...players, { id: Date.now(), name: customP.trim(), snacks: {} }] }); setCustomP(''); toast('✓'); }} className="px-3 bg-neutral-800 text-amber-300 font-bold rounded-xl">+</button></div>
+      <button onClick={spinFairRaffle} className="px-6 py-3 bg-amber-500 text-black font-black rounded-2xl">🎲 {L('لف القرعة العادلة!', 'Spin Fair Raffle!', lang)}</button>
+    </div>
+  );
+  return (
+    <div className="bg-neutral-900 border border-neutral-800 rounded-3xl p-4 space-y-3 text-xs">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-neutral-950 p-3 rounded-2xl border border-amber-500/30"><div><label className="text-[10px] text-amber-300 font-bold block mb-1">{L('إجمالي الفاتورة:', 'Total Bill:', lang)}</label><input type="number" min={0} value={totalBill || ''} onChange={e => saveSquad({ totalBill: Number(e.target.value || 0) })} className="w-full bg-neutral-900 border border-neutral-800 rounded-xl p-2 text-amber-400 font-mono font-black text-center" /></div><div><label className="text-[10px] text-cyan-300 font-bold block mb-1">{L('عدد اللاعبين:', 'Players:', lang)}</label><div className="flex gap-1.5"><input type="number" min={1} max={16} value={players.length || 1} onChange={e => setCount(e.target.value)} className="flex-1 bg-neutral-900 border border-neutral-800 rounded-xl p-2 text-white font-mono text-center" /><button type="button" onClick={() => setCount(players.length + 1)} className="px-3 bg-amber-500 text-black font-black rounded-xl">+</button></div></div></div>
+      <div className="p-2.5 bg-neutral-950 rounded-2xl border border-neutral-800 grid grid-cols-3 text-center"><div><span className="text-neutral-400 block text-[10px]">{L('صافي اللعب:', 'Net Play:', lang)}</span><strong className="text-emerald-400 font-mono">{netPlay}</strong></div><div><span className="text-neutral-400 block text-[10px]">{L('الطلبات:', 'Snacks:', lang)}</span><strong className="text-cyan-400 font-mono">{allSnacksSum}</strong></div><div><span className="text-neutral-400 block text-[10px]">{L('نصيب الفرد:', 'Each Play:', lang)}</span><strong className="text-amber-400 font-mono">{playShare}</strong></div></div>
+      {players.map((p, idx) => { const ps = calcPSnacks(p); return <div key={p.id || idx} className="p-3 bg-neutral-950 rounded-2xl border border-neutral-800 space-y-2"><div className="flex justify-between items-center gap-2"><input value={p.name} onChange={e => saveSquad({ splitPlayers: players.map(x => x.id === p.id ? { ...x, name: e.target.value } : x) })} className="bg-neutral-900 border border-neutral-800 rounded-xl px-2.5 py-1.5 text-white font-bold flex-1" /><div className="text-left"><span className="text-[10px] text-neutral-400 block">{playShare} + {ps}</span><strong className="text-amber-400 font-mono font-black">{Math.round((playShare + ps) * 100) / 100} {L('ج', 'EGP', lang)}</strong></div>{players.length > 1 && <button type="button" onClick={async () => { if (await showConfirm(L('حذف هذا اللاعب؟', 'Remove player?', lang), '', true)) saveSquad({ splitPlayers: players.filter(x => x.id !== p.id) }); }} className="text-rose-400 px-1">✕</button>}</div><div className="flex flex-wrap gap-1.5">{snacksMenu.map(sn => { const q = p.snacks?.[sn.id] || 0; return <div key={sn.id} className="flex items-center gap-1 bg-neutral-900 border border-neutral-800 rounded-xl px-2 py-1 text-[10px]"><span>{sn.icon} {lang === 'en' ? (sn.nameEn || sn.name) : sn.name}</span>{q > 0 && <button type="button" onClick={() => saveSquad({ splitPlayers: players.map(x => x.id === p.id ? { ...x, snacks: { ...(p.snacks || {}), [sn.id]: q - 1 } } : x) })} className="w-5 h-5 bg-rose-600 text-white rounded">-</button>}<span className="font-mono text-amber-400 font-bold">{q}</span><button type="button" onClick={() => saveSquad({ splitPlayers: players.map(x => x.id === p.id ? { ...x, snacks: { ...(p.snacks || {}), [sn.id]: q + 1 } } : x) })} className="w-5 h-5 bg-amber-500 text-black rounded font-black">+</button></div>; })}</div></div>; })}
+    </div>
+  );
+                                                                              }
     
