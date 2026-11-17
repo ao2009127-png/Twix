@@ -38,12 +38,12 @@
     html.twix-reduce-motion *, html.twix-reduce-motion *::before, html.twix-reduce-motion *::after { animation: none !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
     .no-scrollbar::-webkit-scrollbar { display: none; } .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     @media print {
-      body * { visibility: hidden !important; }
-      body:not(.printing-qr) #printable-receipt, body:not(.printing-qr) #printable-receipt * { visibility: visible !important; }
-      body:not(.printing-qr) #printable-receipt { position: absolute; left: 0; top: 0; width: 80mm !important; color: #000 !important; background: #fff !important; padding: 4mm !important; font-family: monospace !important; font-size: 11px !important; }
-      body.printing-qr .fixed { position: static !important; max-height: none !important; overflow: visible !important; background: #fff !important; }
-      body.printing-qr #printable-qr-sheet, body.printing-qr #printable-qr-sheet * { visibility: visible !important; }
-      body.printing-qr #printable-qr-sheet { position: absolute; left: 0; top: 0; width: 100% !important; background: #fff !important; color: #000 !important; padding: 8mm !important; display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+body * { visibility: hidden !important; }
+body:not(.printing-qr) #printable-receipt, body:not(.printing-qr) #printable-receipt * { visibility: visible !important; }
+body:not(.printing-qr) #printable-receipt { position: absolute; left: 0; top: 0; width: 80mm !important; color: #000 !important; background: #fff !important; padding: 4mm !important; font-family: monospace !important; font-size: 11px !important; }
+body.printing-qr .fixed { position: static !important; max-height: none !important; overflow: visible !important; background: #fff !important; }
+body.printing-qr #printable-qr-sheet, body.printing-qr #printable-qr-sheet * { visibility: visible !important; }
+body.printing-qr #printable-qr-sheet { position: absolute; left: 0; top: 0; width: 100% !important; background: #fff !important; color: #000 !important; padding: 8mm !important; display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
     }
   </style>
 </head>
